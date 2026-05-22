@@ -30,12 +30,21 @@ echo "⏰ TG 扫描 Cron: $TG_SCAN_CRON (每次回溯 ${TG_SCAN_HOURS}h)"
 [ -n "$TG_PROXY" ] && echo "🌐 TG 代理: $TG_PROXY"
 
 # === 3. 写入 cron 任务 ===
-mkdir -p /etc/crontabs
-cat > /etc/crontabs/root <<EOF
+# Debian cron 用 /etc/cron.d/ 目录
+cat > /etc/cron.d/ipa-self-host <<EOF
 # IPA Self-Host TG 自动扫描
-$TG_SCAN_CRON /app/run-tg-scan.sh >> /logs/tg-cron.log 2>&1
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+REPO_BASE_URL=$REPO_BASE_URL
+TG_PROXY=$TG_PROXY
+TG_SCAN_HOURS=$TG_SCAN_HOURS
+REPO_NAME=$REPO_NAME
+REPO_IDENTIFIER=$REPO_IDENTIFIER
+
+$TG_SCAN_CRON root /app/run-tg-scan.sh >> /logs/tg-cron.log 2>&1
 EOF
-echo "✅ Cron 任务已写入"
+chmod 0644 /etc/cron.d/ipa-self-host
+echo "✅ Cron 任务已写入 /etc/cron.d/ipa-self-host"
 
 # === 4. 准备日志目录 ===
 mkdir -p /logs /var/log/nginx
@@ -46,4 +55,4 @@ touch /logs/nginx-access.log /logs/nginx-error.log /logs/scanner.log /logs/tg-cr
 
 # === 6. 启动 supervisord ===
 echo "🚀 启动 supervisord..."
-exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
+exec "$@"
