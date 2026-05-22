@@ -4,17 +4,20 @@ services:
     container_name: ipa-self-host
     restart: unless-stopped
     ports:
-      - "8084:80"
+      - "8084:80"                                # 宿主机:8084 → 容器:80（Esign订阅入口）
     volumes:
-      - ./config:/config
-      - ./data:/data
-      - ./session:/session
-      - ./logs:/logs
+      - ./config:/config                         # TG api凭证 + 白名单 + state.json
+      - ./session:/session                       # TG 登录态（首次登录后生成，权限600）
+      - ./logs:/logs                             # 所有进程日志（nginx/scanner/cron）
+      - ./data:/data                             # repo.json 自动生成在这里
+      # 下面两行：把宿主机的IPA和图标目录挂到容器（按需替换为你自己的路径）
+      - /tmp/zfsv3/sata13/17551075426a/data/ipa-repo/x7k9m2hP/ipa:/data/ipa      # IPA文件存放
+      - /tmp/zfsv3/sata13/17551075426a/data/ipa-repo/x7k9m2hP/icons:/data/icons  # 自动提取的App图标
     environment:
-      - TZ=Asia/Shanghai
-      - REPO_BASE_URL=https://ipa.hoyas.dpdns.org:6270/x7k9m2hP
-      - REPO_NAME=Hoya 私人IPA源
-      - REPO_IDENTIFIER=com.hoya.private.repo
-      - TG_PROXY=socks5://10.0.0.100:7893
-      - TG_SCAN_CRON=0 1 * * *
-      - TG_SCAN_HOURS=25
+      - TZ=Asia/Shanghai                         # 时区，影响日志时间戳和cron触发时间
+      - REPO_BASE_URL=https://ipa.hoyas.dpdns.org:6270/x7k9m2hP   # 公网订阅URL（决定nginx路径+下载链接前缀）
+      - REPO_NAME=Hoya 私人IPA源                 # Esign里显示的源名称
+      - REPO_IDENTIFIER=com.hoya.private.repo    # 源的BundleId（AltStore标准，唯一标识）
+      - TG_PROXY=socks5://10.0.0.100:7893        # TG代理（NAS连不上TG则必填，格式 socks5://host:port）
+      - TG_SCAN_CRON=0 1 * * *                   # TG扫描时间（cron表达式，默认每天凌晨1点）
+      - TG_SCAN_HOURS=25                         # 回溯小时数（24h+1h缓冲，防漏消息）
