@@ -168,7 +168,7 @@ async def main():
     })
     priority_groups = config.get("priority_groups", [])
 
-    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True) if not DOWNLOAD_DIR.exists() else None
     log.info("=" * 60)
     log.info(f"TG扫描开始，回溯{SCAN_HOURS}小时")
     log.info(f"代理: {PROXY or '直连'}")

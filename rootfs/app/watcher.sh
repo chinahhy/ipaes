@@ -1,12 +1,14 @@
 #!/bin/bash
 # scanner-watcher: inotify监听 + 5秒防抖 + 10分钟兜底
-set -e
+# 注意：不能 set -e，因为软链接目录的 mkdir 会失败
+set +e
 
 WATCH_DIR=/data/ipa
 DEBOUNCE_SEC=5
 FALLBACK_INTERVAL=600
 
-mkdir -p "$WATCH_DIR"
+# 兼容软链接：只在不存在时建
+[ -e "$WATCH_DIR" ] || mkdir -p "$WATCH_DIR"
 
 scan_now() {
     echo "--- scan at $(date '+%Y-%m-%d %H:%M:%S') [trigger=$1] ---"

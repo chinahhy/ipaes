@@ -154,10 +154,16 @@ def build_app_entry(meta: dict) -> dict:
         "downloadURL": ipa_url, "size": meta["size"],
     }
 
+def _safe_mkdir(p: Path):
+    """兼容软链接的目录创建"""
+    if p.exists() or p.is_symlink():
+        return
+    p.mkdir(parents=True, exist_ok=True)
+
 def scan():
     print(f"🔍 扫描目录: {IPA_DIR}")
-    IPA_DIR.mkdir(parents=True, exist_ok=True)
-    ICONS_DIR.mkdir(parents=True, exist_ok=True)
+    _safe_mkdir(IPA_DIR)
+    _safe_mkdir(ICONS_DIR)
 
     cache = load_cache()
     new_cache = {}
