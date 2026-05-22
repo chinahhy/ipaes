@@ -4,7 +4,13 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-  workflow_dispatch:
+    # 只在影响镜像的文件改动时构建（compose/README/docs改动不触发）
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'rootfs/**'
+      - '.github/workflows/docker-publish.yml'
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   build:
