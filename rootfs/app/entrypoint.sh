@@ -50,6 +50,57 @@ echo "✅ Cron 任务已写入 /etc/cron.d/ipa-self-host"
 mkdir -p /logs /var/log/nginx
 touch /logs/nginx-access.log /logs/nginx-error.log /logs/scanner.log /logs/tg-cron.log
 
+# === 4.5 根据 REPO_BASE_URL 提取 REPO_PATH 并生成 nginx server 配置 ===
+# 例：https://ipa.example.com/x7k9m2hP → REPO_PATH=x7k9m2hP
+REPO_PATH=$(echo "$REPO_BASE_URL" | sed -E 's|^https?://[^/]+/?||; s|/$||' | awk -F/ '{print $NF}')
+[ -z "$REPO_PATH" ] && REPO_PATH="repo"
+echo "🔗 Nginx 入口路径: /$REPO_PATH"
+
+cat > /etc/nginx/conf.d/server.conf <<NGX_EOF
+server {
+    listen 80 default_server;
+    server_name _;
+    charset utf-8;
+
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+
+    # 健康检查
+    location = /healthz {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    # 订阅入口：无扩展名URL返回 repo.json（Esign要求）
+    location = /$REPO_PATH {
+        default_type application/json;
+        alias /data/repo.json;
+    }
+
+    # IPA 下载
+    location ^~ /$REPO_PATH/ipa/ {
+        alias /data/ipa/;
+        autoindex on;
+        autoindex_exact_size off;
+        autoindex_localtime on;
+    }
+
+    # 图标下载
+    location ^~ /$REPO_PATH/icons/ {
+        alias /data/icons/;
+        autoindex on;
+        autoindex_exact_size off;
+        autoindex_localtime on;
+    }
+
+    # 默认根路径屏蔽
+    location = / { return 404; }
+    location / { return 404; }
+}
+NGX_EOF
+
+echo "✅ Nginx server 配置已生成"
+
 # === 5. 首次启动扫一次 IPA 源（保证 repo.json 立刻存在）===
 /app/scanner.py 2>&1 | tee -a /logs/scanner.log || echo "首次扫描失败（可能 ipa 目录为空）"
 
