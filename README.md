@@ -21,6 +21,8 @@ curl -O https://raw.githubusercontent.com/chinahhy/ipa-self-host-v2/main/docker-
 docker compose up -d
 ```
 
+镜像地址：`hoya0803/ipa-self-host:latest`
+
 ### 2. 配置
 
 首次启动会自动生成 `./config/config.json` 模板，填入：

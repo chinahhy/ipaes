@@ -33,7 +33,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: chinahhy/ipa-self-host
+          images: hoya0803/ipa-self-host
           tags: |
             type=ref,event=branch
             type=ref,event=tag

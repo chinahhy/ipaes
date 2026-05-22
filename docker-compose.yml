@@ -1,6 +1,6 @@
 services:
   ipa-self-host:
-    image: chinahhy/ipa-self-host:latest
+    image: hoya0803/ipa-self-host:latest
     container_name: ipa-self-host
     restart: unless-stopped
     ports:
