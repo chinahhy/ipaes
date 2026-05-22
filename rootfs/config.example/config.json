@@ -1,0 +1,25 @@
+{
+  "_help": "TG api_id/api_hash 从 https://my.telegram.org 申请",
+  "api_id": 12345678,
+  "api_hash": "your_api_hash_here",
+  "phone": "+8613800138000",
+  "_groups_help": "要扫描的TG群链接列表（按优先级排序）",
+  "groups": [
+    "https://t.me/example_group_1",
+    "https://t.me/example_group_2"
+  ],
+  "_priority_help": "优先群：同版本时优先采用，其他群跳过",
+  "priority_groups": [
+    "https://t.me/example_group_1"
+  ],
+  "_whitelist_help": "白名单App：只下载关键词命中的IPA",
+  "whitelist": [
+    {"name": "示例App1", "keywords": ["app1", "示例1"]},
+    {"name": "示例App2", "keywords": ["app2"]}
+  ],
+  "rate_limit": {
+    "min_interval_sec": 30,
+    "max_interval_sec": 120,
+    "max_per_day": 50
+  }
+}

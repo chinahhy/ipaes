@@ -1,0 +1,14 @@
+.git
+.github
+.gitignore
+.dockerignore
+README.md
+docs/
+*.md
+config/
+data/
+session/
+logs/
+.DS_Store
+__pycache__/
+*.pyc

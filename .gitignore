@@ -1,0 +1,19 @@
+# 用户数据
+config/
+data/
+session/
+logs/
+
+# 本地测试构建产物
+*.tar
+*.tar.gz
+
+# 系统
+.DS_Store
+*.swp
+*.pyc
+__pycache__/
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,20 @@
+services:
+  ipa-self-host:
+    image: chinahhy/ipa-self-host:latest
+    container_name: ipa-self-host
+    restart: unless-stopped
+    ports:
+      - "8084:80"
+    volumes:
+      - ./config:/config
+      - ./data:/data
+      - ./session:/session
+      - ./logs:/logs
+    environment:
+      - TZ=Asia/Shanghai
+      - REPO_BASE_URL=https://ipa.hoyas.dpdns.org:6270/x7k9m2hP
+      - REPO_NAME=Hoya 私人IPA源
+      - REPO_IDENTIFIER=com.hoya.private.repo
+      - TG_PROXY=socks5://10.0.0.100:7893
+      - TG_SCAN_CRON=0 1 * * *
+      - TG_SCAN_HOURS=25
