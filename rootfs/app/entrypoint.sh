@@ -41,14 +41,14 @@ TG_SCAN_HOURS=$TG_SCAN_HOURS
 REPO_NAME=$REPO_NAME
 REPO_IDENTIFIER=$REPO_IDENTIFIER
 
-$TG_SCAN_CRON root /app/run-tg-scan.sh >> /logs/tg-cron.log 2>&1
+$TG_SCAN_CRON root /app/run-tg-scan.sh
 EOF
 chmod 0644 /etc/cron.d/ipa-self-host
 echo "✅ Cron 任务已写入 /etc/cron.d/ipa-self-host"
 
 # === 4. 准备日志目录 ===
 mkdir -p /logs /var/log/nginx
-touch /logs/nginx-access.log /logs/nginx-error.log /logs/scanner.log /logs/tg-cron.log
+touch /logs/nginx-access.log /logs/nginx-error.log /logs/scanner.log /logs/tg-cron.log /logs/tg-runtime.log
 
 # === 4.5 根据 REPO_BASE_URL 提取 REPO_PATH 并生成 nginx server 配置 ===
 # 例：https://ipa.example.com/x7k9m2hP → REPO_PATH=x7k9m2hP

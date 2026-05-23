@@ -18,7 +18,7 @@ from telethon.tl.types import DocumentAttributeFilename
 
 CONFIG_PATH = Path("/config/config.json")
 SESSION_PATH = Path("/session/tg-ipa-bot")
-LOG_PATH = Path("/logs/scanner.log")
+LOG_PATH = Path(os.environ.get("TG_LOG_PATH", "/logs/tg-cron.log"))
 DOWNLOAD_DIR = Path("/data/ipa")
 STATE_PATH = Path("/config/state.json")
 
@@ -32,13 +32,24 @@ def parse_proxy(proxy_url: str):
 PROXY = parse_proxy(os.environ.get("TG_PROXY", ""))
 SCAN_HOURS = int(os.environ.get("TG_SCAN_HOURS", "25"))
 
-LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler(sys.stdout)],
-)
 log = logging.getLogger("tg-bot")
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+_file_handler = logging.FileHandler(LOG_PATH)
+_file_handler.setFormatter(_formatter)
+log.setLevel(logging.INFO)
+log.handlers.clear()
+log.addHandler(_file_handler)
+log.propagate = False
+
+# Telethon 在跨 DC 下载/代理抖动时会刷大量底层重连 traceback。
+# 业务层已经记录“下载失败/扫描总结”，这里压低第三方库噪音，防止 tg-cron.log 几小时膨胀到几百 MB。
+logging.getLogger().handlers.clear()
+logging.getLogger().setLevel(logging.CRITICAL)
+for _name in ("telethon", "asyncio"):
+    logging.getLogger(_name).handlers.clear()
+    logging.getLogger(_name).setLevel(logging.CRITICAL)
+    logging.getLogger(_name).propagate = False
 
 
 def load_config():
