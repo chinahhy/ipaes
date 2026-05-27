@@ -222,12 +222,24 @@ def scan():
     final_apps = [build_app_entry(m) for m in sorted_metas]
     print(f"📊 合并: 总IPA{len(apps)}个 → 去重后{len(final_apps)}个app（按mtime倒序）")
 
-    repo = {"name": REPO_NAME, "identifier": REPO_IDENTIFIER, "apps": final_apps, "news": []}
+    # 仓库元信息（顶层 iconURL 是 AltStore/Esign 协议字段，让客户端订阅源时能显示 logo）
+    # _repo.png 是一张固定文件，不参与 IPA 扫描清理（见下方 valid_icons 集合明确放行）
+    repo = {
+        "name": REPO_NAME,
+        "identifier": REPO_IDENTIFIER,
+        "iconURL": f"{BASE_URL}/icons/_repo.png",
+        "apps": final_apps,
+        "news": [],
+    }
     REPO_JSON.write_text(json.dumps(repo, indent=2, ensure_ascii=False))
     save_cache(new_cache)
 
+    # 清理孤立图标：删掉那些不对应任何已知 IPA 的图标
+    # 但要放行 _ 开头的元数据文件（_repo.png 等仓库级图标），它们不属于 IPA 但要保留
     valid_icons = {m["meta"].get("icon_filename") for m in new_cache.values() if m.get("meta", {}).get("icon_filename")}
     for icon in ICONS_DIR.glob("*.png"):
+        if icon.name.startswith("_"):
+            continue  # _repo.png 等元数据图标永不清理
         if icon.name not in valid_icons:
             print(f"  🗑️ 清理孤立图标: {icon.name}")
             icon.unlink()
