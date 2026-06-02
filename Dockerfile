@@ -24,7 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir --break-system-packages \
     telethon==1.36.0 \
     cryptg==0.4.0 \
-    PySocks==1.7.1
+    PySocks==1.7.1 \
+    flask==3.0.3
 
 # 拷贝镜像内文件
 COPY rootfs/ /
@@ -35,8 +36,8 @@ RUN chmod +x /app/*.sh /app/*.py 2>/dev/null || true \
     && chmod 755 /app \
     && rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 
-# 暴露端口
-EXPOSE 80
+# 暴露端口（80=订阅源 nginx, 8085=管理 webui）
+EXPOSE 80 8085
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

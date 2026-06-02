@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IPA Self-Host 控制台</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+<style>
+  :root {
+    --bg:#0f1419; --card:#1a2028; --line:#252d38;
+    --text:#e6edf3; --muted:#7d8590;
+    --primary:#388bfd; --danger:#f85149; --warn:#d29922; --ok:#3fb950;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px}
+  .head{display:flex;justify-content:space-between;align-items:center;
+        padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:20px}
+  .head h1{margin:0;font-size:20px;font-weight:600}
+  .head .stat{color:var(--muted);font-size:13px}
+  .head .stat b{color:var(--text);margin:0 4px}
+  .head .actions{display:flex;gap:8px}
+  .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+  .tab{padding:10px 16px;cursor:pointer;color:var(--muted);
+       border-bottom:2px solid transparent;transition:all .15s}
+  .tab.on{color:var(--text);border-color:var(--primary)}
+  .tab:hover{color:var(--text)}
+  .card{background:var(--card);border:1px solid var(--line);
+        border-radius:8px;padding:16px;margin-bottom:14px}
+  .card h2{margin:0 0 12px;font-size:15px;font-weight:600;
+           display:flex;justify-content:space-between;align-items:center}
+  .row{display:flex;align-items:center;gap:10px;padding:8px 0;
+       border-bottom:1px solid var(--line)}
+  .row:last-child{border:none}
+  .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pill{background:#2a3340;color:var(--muted);padding:2px 8px;
+        border-radius:10px;font-size:11px;margin-right:4px;display:inline-block;margin-bottom:2px}
+  .pill.star{background:#3a2f00;color:var(--warn)}
+  button,input,select,textarea{font:inherit;color:inherit;border:1px solid var(--line);
+       background:#0d1117;padding:6px 10px;border-radius:5px;outline:none}
+  button{cursor:pointer;background:var(--card);transition:all .15s}
+  button:hover{border-color:var(--primary)}
+  button.pri{background:var(--primary);border-color:var(--primary);color:#fff}
+  button.pri:hover{filter:brightness(1.1)}
+  button.danger{color:var(--danger);border-color:#3a1f23}
+  button.danger:hover{background:var(--danger);color:#fff;border-color:var(--danger)}
+  button.warn{color:var(--warn);border-color:#3a3000}
+  button.sm{padding:3px 8px;font-size:12px}
+  input,select{width:100%}
+  .addbar{display:flex;gap:8px;margin-top:10px}
+  .addbar input{flex:1}
+  .kw{display:flex;align-items:center;gap:6px;background:#0d1117;
+      border:1px solid var(--line);border-radius:4px;padding:3px 8px;font-size:12px}
+  .kw button{padding:0;border:none;background:none;color:var(--muted);font-size:14px;line-height:1}
+  .kw button:hover{color:var(--danger)}
+  .kws{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  pre.log{background:#0d1117;border:1px solid var(--line);border-radius:5px;
+       padding:10px;max-height:400px;overflow:auto;font:11px/1.4 Menlo,Monaco,monospace;
+       color:#b1bac4;white-space:pre-wrap;margin:0}
+  .empty{color:var(--muted);text-align:center;padding:30px}
+  .toast{position:fixed;top:20px;right:20px;background:var(--card);
+       border:1px solid var(--line);padding:12px 16px;border-radius:6px;z-index:99;
+       box-shadow:0 4px 12px rgba(0,0,0,.4);max-width:400px}
+  .toast.ok{border-color:var(--ok)} .toast.err{border-color:var(--danger)}
+  .ipa-item{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;
+       align-items:center;padding:8px;border-bottom:1px solid var(--line)}
+  .ipa-item img{width:32px;height:32px;border-radius:6px;background:#0d1117}
+  .ipa-item .meta{font-size:11px;color:var(--muted)}
+  .switch{position:relative;display:inline-block;width:42px;height:22px}
+  .switch input{display:none}
+  .slider{position:absolute;inset:0;background:#3a4150;border-radius:22px;
+       cursor:pointer;transition:.2s}
+  .slider:before{content:"";position:absolute;width:16px;height:16px;
+       left:3px;top:3px;background:white;border-radius:50%;transition:.2s}
+  input:checked + .slider{background:var(--primary)}
+  input:checked + .slider:before{transform:translateX(20px)}
+  label.lbl{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  @media (max-width:600px){.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap" x-data="ipaApp()" x-init="init()">
+
+  <div class="head">
+    <div>
+      <h1>📱 IPA Self-Host 控制台</h1>
+      <div class="stat">
+        IPA: <b x-text="status.ipa_count || 0"></b>个 ·
+        上次扫描: <b x-text="status.last_scan || '未知'"></b>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="pri" @click="triggerScan()" :disabled="scanning">
+        <span x-text="scanning ? '⏳ 扫描中...' : '🔄 立即扫描'"></span>
+      </button>
+      <button @click="loadAll()">↻ 刷新</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab" :class="{on:tab==='groups'}" @click="tab='groups'">📡 群组</div>
+    <div class="tab" :class="{on:tab==='whitelist'}" @click="tab='whitelist'">📦 关键词</div>
+    <div class="tab" :class="{on:tab==='ipa'}" @click="tab='ipa'">💾 IPA 文件</div>
+    <div class="tab" :class="{on:tab==='unlock'}" @click="tab='unlock'">🔐 解锁码</div>
+    <div class="tab" :class="{on:tab==='account'}" @click="tab='account'">👤 账号</div>
+    <div class="tab" :class="{on:tab==='settings'}" @click="tab='settings'">⚙️ 速率</div>
+    <div class="tab" :class="{on:tab==='logs'}" @click="tab='logs'">📜 日志</div>
+  </div>
+
+  <!-- TAB: 群组 -->
+  <div x-show="tab==='groups'" class="card">
+    <h2>TG 群组列表（⭐ = 优先群，同版本优先采用）</h2>
+    <template x-if="!cfg.groups || !cfg.groups.length">
+      <div class="empty">还没有群组</div>
+    </template>
+    <template x-for="g in (cfg.groups||[])" :key="g">
+      <div class="row">
+        <button class="sm" @click="togglePriority(g)"
+                :title="cfg.priority_groups.includes(g)?'取消优先':'设为优先'"
+                x-text="cfg.priority_groups.includes(g)?'⭐':'☆'"></button>
+        <div class="grow"><a :href="g" target="_blank" style="color:#79b8ff;text-decoration:none" x-text="g"></a></div>
+        <button class="danger sm" @click="delGroup(g)">删除</button>
+      </div>
+    </template>
+    <div class="addbar">
+      <input x-model="newGroup" placeholder="https://t.me/xxx" @keydown.enter="addGroup()">
+      <button class="pri" @click="addGroup()">+ 添加群组</button>
+    </div>
+  </div>
+
+  <!-- TAB: 白名单 -->
+  <div x-show="tab==='whitelist'" class="card">
+    <h2>IPA 关键词白名单（只下载文件名含关键词的 IPA）</h2>
+    <template x-if="!cfg.whitelist || !cfg.whitelist.length">
+      <div class="empty">还没有白名单</div>
+    </template>
+    <template x-for="app in (cfg.whitelist||[])" :key="app.name">
+      <div class="row" style="display:block">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="grow"><b x-text="app.name"></b>
+            <span style="color:var(--muted);font-size:12px" x-text="'（'+app.keywords.length+' 个关键词）'"></span>
+          </div>
+          <button class="danger sm" @click="delApp(app.name)">删 App</button>
+        </div>
+        <div class="kws">
+          <template x-for="(k,i) in app.keywords" :key="k">
+            <div class="kw">
+              <span x-text="k"></span>
+              <button @click="delKeyword(app,i)" title="删关键词">×</button>
+            </div>
+          </template>
+          <div class="kw" style="background:transparent">
+            <input style="background:transparent;border:none;padding:0;width:120px"
+                   :placeholder="'+ 加关键词'"
+                   x-model="newKw[app.name]"
+                   @keydown.enter="addKeyword(app)">
+          </div>
+        </div>
+      </div>
+    </template>
+    <div style="border-top:1px dashed var(--line);margin-top:14px;padding-top:14px">
+      <label class="lbl">新增 App</label>
+      <div class="addbar">
+        <input x-model="newApp.name" placeholder="App 名称（如 YouTube）" style="flex:1">
+        <input x-model="newApp.keywords" placeholder="关键词 1, 关键词 2, ..." style="flex:2">
+        <button class="pri" @click="addApp()">+ 添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: IPA 文件 -->
+  <div x-show="tab==='ipa'" class="card">
+    <h2>
+      <span>已下载 IPA 文件（<span x-text="ipaList.length"></span> 个）</span>
+      <span>
+        <button class="sm" @click="loadIpa()">↻ 刷新</button>
+        <button class="danger sm" :disabled="!selected.length"
+                @click="delIpaBatch()">删除选中（<span x-text="selected.length"></span>）</button>
+      </span>
+    </h2>
+    <template x-if="!ipaList.length">
+      <div class="empty">没有 IPA 文件</div>
+    </template>
+    <template x-for="f in ipaList" :key="f.filename">
+      <div class="ipa-item">
+        <input type="checkbox" :value="f.filename" x-model="selected" style="width:auto">
+        <div>
+          <div x-text="f.app_name || f.filename" style="font-weight:500"></div>
+          <div class="meta">
+            <span x-text="'v'+f.version" x-show="f.version"></span>
+            <span x-text="' · '+f.size_mb+' MB'"></span>
+            <span x-text="' · '+f.mtime_str"></span>
+            <span x-text="' · '+f.filename" style="opacity:.6"></span>
+          </div>
+        </div>
+        <button class="sm" @click="downloadIpa(f.filename)" title="下载">⬇</button>
+        <button class="danger sm" @click="delIpaSingle(f.filename)">删</button>
+      </div>
+    </template>
+  </div>
+
+  <!-- TAB: 解锁码 -->
+  <div x-show="tab==='unlock'" class="card">
+    <h2>软件源解锁码</h2>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
+      订阅链接 = <code>https://your-host/<b x-text="unlock.enabled ? unlock.code : 'repo'"></b></code>。
+      <br>开启后，必须知道解锁码才能访问订阅源；关闭则路径固定为 <code>/repo</code>。
+      <br><b style="color:var(--warn)">改完需要重启容器才生效（点下方按钮）。</b>
+    </div>
+    <div class="row">
+      <div class="grow">启用解锁码</div>
+      <label class="switch">
+        <input type="checkbox" x-model="unlock.enabled">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="row">
+      <div style="width:120px">解锁码</div>
+      <input style="flex:1" x-model="unlock.code" :disabled="!unlock.enabled"
+             placeholder="4-32 位字母数字" maxlength="32">
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px">
+      <button class="pri" @click="saveUnlock()">💾 保存</button>
+      <button class="warn" @click="restartContainer()">↻ 保存并重启容器</button>
+    </div>
+  </div>
+
+  <!-- TAB: 账号 -->
+  <div x-show="tab==='account'" class="card">
+    <h2>修改 WebUI 登录密码</h2>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
+      用户名固定为 <code>admin</code>（如需修改用户名请改容器 env <code>WEBUI_USER</code>）。
+      <br>密码保存在 <code>/config/webui_pass.json</code>，重启容器不丢失。
+      <br><b style="color:var(--warn)">改完后浏览器会要求重新输入密码登录。</b>
+    </div>
+    <div class="row">
+      <div style="width:120px">当前密码</div>
+      <input style="flex:1" type="password" x-model="pw.old" placeholder="当前登录密码">
+    </div>
+    <div class="row">
+      <div style="width:120px">新密码</div>
+      <input style="flex:1" type="password" x-model="pw.new" placeholder="4-64 位" maxlength="64">
+    </div>
+    <div class="row">
+      <div style="width:120px">确认新密码</div>
+      <input style="flex:1" type="password" x-model="pw.confirm" placeholder="再输一遍" maxlength="64">
+    </div>
+    <div style="margin-top:14px">
+      <button class="pri" @click="changePassword()">🔑 修改密码</button>
+    </div>
+  </div>
+
+  <!-- TAB: 速率 -->
+  <div x-show="tab==='settings'" class="card">
+    <h2>下载速率限制</h2>
+    <div class="grid3">
+      <div>
+        <label class="lbl">每日最多下载数</label>
+        <input type="number" x-model.number="cfg.rate_limit.max_per_day" min="1">
+      </div>
+      <div>
+        <label class="lbl">最小间隔（秒）</label>
+        <input type="number" x-model.number="cfg.rate_limit.min_interval_sec" min="1">
+      </div>
+      <div>
+        <label class="lbl">最大间隔（秒）</label>
+        <input type="number" x-model.number="cfg.rate_limit.max_interval_sec" min="1">
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <button class="pri" @click="saveRate()">💾 保存</button>
+    </div>
+  </div>
+
+  <!-- TAB: 日志 -->
+  <div x-show="tab==='logs'" class="card">
+    <h2>
+      <span>实时日志</span>
+      <span>
+        <select x-model="logName" @change="loadLog()" style="width:auto;padding:3px 8px;font-size:12px">
+          <option value="tg-cron">TG 扫描日志</option>
+          <option value="scanner">IPA 仓库扫描</option>
+          <option value="nginx-error">Nginx 错误</option>
+        </select>
+        <button class="sm" @click="loadLog()">↻</button>
+        <label style="font-size:12px;color:var(--muted)">
+          <input type="checkbox" x-model="autoRefresh" style="width:auto"> 自动刷新（3s）
+        </label>
+      </span>
+    </h2>
+    <pre class="log" x-text="logContent || '(空)'"></pre>
+  </div>
+
+  <!-- 全局 Toast -->
+  <div x-show="toast.msg" x-transition class="toast" :class="toast.type"
+       @click="toast.msg=''" x-text="toast.msg"></div>
+
+</div>
+
+<script>
+function ipaApp() {
+  return {
+    tab: 'groups',
+    cfg: { groups:[], priority_groups:[], whitelist:[], rate_limit:{} },
+    status: {},
+    unlock: { enabled:true, code:'142536' },
+    pw: { old:'', new:'', confirm:'' },
+    ipaList: [],
+    selected: [],
+    newGroup: '',
+    newApp: { name:'', keywords:'' },
+    newKw: {},
+    scanning: false,
+    logName: 'tg-cron',
+    logContent: '',
+    autoRefresh: false,
+    toast: { msg:'', type:'ok' },
+    _logTimer: null,
+
+    async init() {
+      await this.loadAll();
+      // 自动刷新日志
+      setInterval(() => {
+        if (this.tab === 'logs' && this.autoRefresh) this.loadLog();
+        if (this.tab === 'ipa') this.loadStatus();
+      }, 3000);
+    },
+
+    async loadAll() {
+      await Promise.all([this.loadConfig(), this.loadStatus(), this.loadUnlock(), this.loadIpa()]);
+    },
+
+    async api(method, url, body) {
+      try {
+        const r = await fetch(url, {
+          method, headers: {'Content-Type':'application/json'},
+          body: body ? JSON.stringify(body) : undefined
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || r.statusText);
+        return j;
+      } catch (e) {
+        this.showToast(e.message, 'err');
+        throw e;
+      }
+    },
+
+    showToast(msg, type='ok') {
+      this.toast = { msg, type };
+      setTimeout(() => this.toast.msg = '', 3000);
+    },
+
+    async loadConfig() {
+      const c = await this.api('GET', '/api/config');
+      // 兜底 rate_limit 字段
+      c.rate_limit = c.rate_limit || { max_per_day:30, min_interval_sec:30, max_interval_sec:120 };
+      this.cfg = c;
+    },
+    async loadStatus() {
+      this.status = await this.api('GET', '/api/status');
+    },
+    async loadUnlock() {
+      this.unlock = await this.api('GET', '/api/unlock');
+    },
+    async loadIpa() {
+      const r = await this.api('GET', '/api/ipa');
+      this.ipaList = r.files;
+    },
+    async loadLog() {
+      const r = await fetch('/api/logs/' + this.logName + '?lines=300');
+      const j = await r.json();
+      this.logContent = (j.lines || []).join('');
+      // 自动滚到底部
+      this.$nextTick(() => {
+        const pre = document.querySelector('pre.log');
+        if (pre) pre.scrollTop = pre.scrollHeight;
+      });
+    },
+
+    // 群组
+    async addGroup() {
+      if (!this.newGroup.trim()) return;
+      await this.api('POST', '/api/groups', { url: this.newGroup.trim() });
+      this.newGroup = '';
+      await this.loadConfig();
+      this.showToast('已添加');
+    },
+    async delGroup(url) {
+      if (!confirm('删除群组：' + url + '？')) return;
+      await this.api('DELETE', '/api/groups', { url });
+      await this.loadConfig();
+      this.showToast('已删除');
+    },
+    async togglePriority(url) {
+      await this.api('POST', '/api/groups/priority', { url });
+      await this.loadConfig();
+    },
+
+    // 白名单
+    async addApp() {
+      const name = this.newApp.name.trim();
+      const kws = this.newApp.keywords.split(',').map(s=>s.trim()).filter(Boolean);
+      if (!name || !kws.length) {
+        this.showToast('App 名称 + 至少一个关键词', 'err');
+        return;
+      }
+      await this.api('POST', '/api/whitelist', { name, keywords: kws });
+      this.newApp = { name:'', keywords:'' };
+      await this.loadConfig();
+      this.showToast('已添加');
+    },
+    async delApp(name) {
+      if (!confirm('删除整个 App "' + name + '" 的白名单？')) return;
+      await this.api('DELETE', '/api/whitelist', { name });
+      await this.loadConfig();
+      this.showToast('已删除');
+    },
+    async addKeyword(app) {
+      const k = (this.newKw[app.name] || '').trim();
+      if (!k) return;
+      if (app.keywords.includes(k)) {
+        this.showToast('关键词已存在', 'err');
+        return;
+      }
+      const next = [...app.keywords, k];
+      await this.api('PUT', '/api/whitelist', { name: app.name, keywords: next });
+      this.newKw[app.name] = '';
+      await this.loadConfig();
+    },
+    async delKeyword(app, idx) {
+      const next = app.keywords.filter((_,i) => i !== idx);
+      if (!next.length) {
+        if (!confirm('这是最后一个关键词，删除后整个 App 也会被移除。继续？')) return;
+        await this.api('DELETE', '/api/whitelist', { name: app.name });
+      } else {
+        await this.api('PUT', '/api/whitelist', { name: app.name, keywords: next });
+      }
+      await this.loadConfig();
+    },
+
+    // IPA 文件
+    async delIpaSingle(filename) {
+      if (!confirm('确认删除 "' + filename + '"？\n（同时删除图标，下次扫描可重新下载该版本）')) return;
+      const r = await this.api('DELETE', '/api/ipa', { filenames: [filename] });
+      await this.loadIpa(); await this.loadStatus();
+      this.showToast('已删除 ' + r.deleted.length + ' 个');
+    },
+    async delIpaBatch() {
+      if (!this.selected.length) return;
+      if (!confirm('删除 ' + this.selected.length + ' 个 IPA 文件？')) return;
+      const r = await this.api('DELETE', '/api/ipa', { filenames: this.selected });
+      this.selected = [];
+      await this.loadIpa(); await this.loadStatus();
+      this.showToast('已删除 ' + r.deleted.length + ' 个');
+    },
+    downloadIpa(filename) {
+      // 通过 nginx 公开路径直接下载
+      window.open('/_ipa_proxy/' + encodeURIComponent(filename), '_blank');
+    },
+
+    // 速率
+    async saveRate() {
+      await this.api('PUT', '/api/rate_limit', this.cfg.rate_limit);
+      this.showToast('已保存');
+    },
+
+    // 解锁码
+    async saveUnlock() {
+      await this.api('PUT', '/api/unlock', this.unlock);
+      this.showToast('已保存（需重启容器生效）');
+    },
+    async restartContainer() {
+      await this.api('PUT', '/api/unlock', this.unlock);
+      if (!confirm('容器将重启（约 10 秒）。继续？')) return;
+      await this.api('POST', '/api/restart');
+      this.showToast('容器重启中，10 秒后刷新页面');
+      setTimeout(() => location.reload(), 12000);
+    },
+
+    // 修改密码
+    async changePassword() {
+      if (!this.pw.old || !this.pw.new || !this.pw.confirm) {
+        this.showToast('请填完三个密码字段', 'err');
+        return;
+      }
+      if (this.pw.new !== this.pw.confirm) {
+        this.showToast('新密码两次输入不一致', 'err');
+        return;
+      }
+      if (this.pw.new.length < 4) {
+        this.showToast('新密码至少 4 位', 'err');
+        return;
+      }
+      try {
+        await this.api('PUT', '/api/password', {
+          old_password: this.pw.old,
+          new_password: this.pw.new,
+        });
+        this.pw = { old:'', new:'', confirm:'' };
+        this.showToast('密码已修改，3 秒后刷新页面重新登录');
+        // 清掉浏览器 Basic Auth 缓存：跳转一个会 401 的请求再刷新
+        setTimeout(() => {
+          // 用一个假账号访问让浏览器丢弃旧凭据
+          fetch('/api/config', { headers: { Authorization: 'Basic ' + btoa('logout:logout') }})
+            .finally(() => location.reload());
+        }, 3000);
+      } catch (e) { /* api() 已 toast */ }
+    },
+
+    // 扫描
+    async triggerScan() {
+      this.scanning = true;
+      try {
+        await this.api('POST', '/api/scan');
+        this.showToast('扫描已触发，切换到「日志」查看进度');
+        this.tab = 'logs';
+        this.autoRefresh = true;
+        this.loadLog();
+      } finally {
+        setTimeout(() => this.scanning = false, 3000);
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>
