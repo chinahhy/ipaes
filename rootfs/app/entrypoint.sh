@@ -55,9 +55,13 @@ mkdir -p /logs /var/log/nginx
 touch /logs/nginx-access.log /logs/nginx-error.log /logs/scanner.log /logs/tg-cron.log /logs/tg-runtime.log
 
 # === 4.5 解锁码（优先 /config/unlock.json，回退 REPO_BASE_URL 末段）===
-# 初始化 unlock.json（不存在则用默认 142536）
+# 初始化 unlock.json（不存在则保留 REPO_BASE_URL 现有末段，避免破坏 Esign 已订阅 URL；只有完全无可推断时才用默认 142536）
 if [ ! -f /config/unlock.json ]; then
-    echo '{"enabled": true, "code": "142536"}' > /config/unlock.json
+    _INIT_CODE=$(echo "$REPO_BASE_URL" | sed -E 's|^https?://[^/]+/?||; s|/$||' | awk -F/ '{print $NF}')
+    [ -z "$_INIT_CODE" ] && _INIT_CODE="142536"
+    # 用 printf 避免 echo 转义陷阱；jq 不一定有，手写 JSON
+    printf '{"enabled": true, "code": "%s"}\n' "$_INIT_CODE" > /config/unlock.json
+    echo "📝 初始化 unlock.json，沿用 REPO_BASE_URL 末段: $_INIT_CODE"
 fi
 UNLOCK_ENABLED=$(python3 -c "import json;print(json.load(open('/config/unlock.json')).get('enabled',True))" 2>/dev/null || echo "True")
 UNLOCK_CODE=$(python3 -c "import json;print(json.load(open('/config/unlock.json')).get('code','142536'))" 2>/dev/null || echo "142536")
