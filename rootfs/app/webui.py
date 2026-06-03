@@ -370,7 +370,17 @@ def api_set_unlock():
         if not code or not code.isalnum() or len(code) < 4 or len(code) > 32:
             return jsonify({"error": "code 必须 4-32 位字母数字"}), 400
     p = Path("/config/unlock.json")
-    p.write_text(json.dumps({"enabled": enabled, "code": code}, ensure_ascii=False, indent=2))
+    # 保留服务端访问 token：它是完整订阅 URL 的私密凭证。
+    # 只改 code/enabled 时不能把 token 抹掉，否则下次重启会生成新 token，旧源链接立即失效。
+    old_conf = {}
+    if p.exists():
+        try:
+            old_conf = json.loads(p.read_text())
+        except Exception:
+            old_conf = {}
+    new_conf = dict(old_conf)
+    new_conf.update({"enabled": enabled, "code": code})
+    p.write_text(json.dumps(new_conf, ensure_ascii=False, indent=2))
     return jsonify({"ok": True, "msg": "已保存。需要重启容器生效（点右上 ↻ 重启按钮）"})
 
 # ============ API: 修改 WebUI 密码 ============

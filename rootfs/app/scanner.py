@@ -13,7 +13,21 @@ IPA仓库自动扫描器（AltStore/Esign兼容格式）
 import os, sys, json, zipfile, plistlib, shutil
 from pathlib import Path
 from datetime import datetime, timezone
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse, quote
+
+# 轻松签/全能签/魔力签类软件源锁定下载字段：
+# - apps[].isNeedlock=1 后客户端按钮显示“解锁”
+# - news.url 提供解锁验证接口；news.key 与接口返回 md5(key+udid) 配套
+LOCK_AUTH_KEY = os.environ.get("IPA_LOCK_AUTH_KEY", "hoya_ipa_lock_v1")
+# 服务端真实鉴权 token：写进订阅 URL 和 IPA 下载 URL；没有 token 的请求由 nginx 拦截。
+ACCESS_TOKEN = os.environ.get("IPA_ACCESS_TOKEN", "").strip()
+
+def with_access_token(url: str) -> str:
+    """给 repo.json 里的下载链接追加 token 参数；token 值不写入日志。"""
+    if not ACCESS_TOKEN:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}token={quote(ACCESS_TOKEN)}"
 
 # ===== 配置（全部来自环境变量）=====
 BASE_URL = os.environ.get("REPO_BASE_URL", "https://example.com/repo")
@@ -132,7 +146,7 @@ def parse_ipa(ipa_path: Path):
         return None
 
 def build_app_entry(meta: dict) -> dict:
-    ipa_url = f"{BASE_URL}/ipa/{quote(meta['ipa_filename'])}"
+    ipa_url = with_access_token(f"{BASE_URL}/ipa/{quote(meta['ipa_filename'])}")
     icon_url = f"{BASE_URL}/icons/{quote(meta['icon_filename'])}?v={int(meta['mtime'])}" if meta.get("icon_filename") else ""
     date_str = iso_date(meta["mtime"])
 
@@ -141,6 +155,7 @@ def build_app_entry(meta: dict) -> dict:
         "localizedDescription": f"From {meta['ipa_filename']}",
         "downloadURL": ipa_url, "size": meta["size"],
         "minOSVersion": meta["minOSVersion"], "maxOSVersion": "99.0",
+        "isNeedlock": 0, "appType": 1,
     }
 
     return {
@@ -152,6 +167,7 @@ def build_app_entry(meta: dict) -> dict:
         "version": meta["version"], "versionDate": date_str,
         "versionDescription": f"From {meta['ipa_filename']}",
         "downloadURL": ipa_url, "size": meta["size"],
+        "isNeedlock": 0, "appType": 1,
     }
 
 def _safe_mkdir(p: Path):
@@ -229,7 +245,17 @@ def scan():
         "identifier": REPO_IDENTIFIER,
         "iconURL": f"{BASE_URL}/icons/_repo.png",
         "apps": final_apps,
-        "news": [],
+        "news": {
+            "title": REPO_NAME,
+            "caption": "此源使用专属 token URL 访问；请勿外传订阅链接。",
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "key": LOCK_AUTH_KEY,
+            "tintColor": "3478F6",
+            "isUnlock": 0,
+            "imageURL": f"{BASE_URL}/icons/_repo.png",
+            "url": "",
+            "pay": "",
+        },
     }
     REPO_JSON.write_text(json.dumps(repo, indent=2, ensure_ascii=False))
     save_cache(new_cache)

@@ -37,6 +37,7 @@ cat > /etc/cron.d/ipa-self-host <<EOF
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 REPO_BASE_URL=$REPO_BASE_URL
+IPA_ACCESS_TOKEN=$IPA_ACCESS_TOKEN
 TG_PROXY=$TG_PROXY
 TG_SCAN_HOURS=$TG_SCAN_HOURS
 REPO_NAME=$REPO_NAME
@@ -65,6 +66,24 @@ if [ ! -f /config/unlock.json ]; then
 fi
 UNLOCK_ENABLED=$(python3 -c "import json;print(json.load(open('/config/unlock.json')).get('enabled',True))" 2>/dev/null || echo "True")
 UNLOCK_CODE=$(python3 -c "import json;print(json.load(open('/config/unlock.json')).get('code','142536'))" 2>/dev/null || echo "142536")
+ACCESS_TOKEN=$(python3 - <<'PY_TOKEN'
+import json, secrets
+from pathlib import Path
+p = Path('/config/unlock.json')
+try:
+    d = json.loads(p.read_text()) if p.exists() else {}
+except Exception:
+    d = {}
+tok = str(d.get('token') or '').strip()
+if not tok:
+    tok = secrets.token_urlsafe(24)
+    d['token'] = tok
+    p.write_text(json.dumps(d, ensure_ascii=False, indent=2))
+print(tok)
+PY_TOKEN
+)
+export IPA_ACCESS_TOKEN="$ACCESS_TOKEN"
+echo "🔐 访问 token 已启用（值不输出）"
 
 if [ "$UNLOCK_ENABLED" = "True" ] && [ -n "$UNLOCK_CODE" ]; then
     REPO_PATH="$UNLOCK_CODE"
@@ -92,7 +111,7 @@ server {
     charset utf-8;
 
     add_header Access-Control-Allow-Origin * always;
-    add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+    add_header Access-Control-Allow-Methods "GET, HEAD, POST, OPTIONS" always;
 
     # 健康检查
     location = /healthz {
@@ -102,12 +121,14 @@ server {
 
     # 订阅入口：无扩展名URL返回 repo.json（Esign要求）
     location = /$REPO_PATH {
+        if (\$arg_token != "$ACCESS_TOKEN") { return 403; }
         default_type application/json;
         alias /data/repo.json;
     }
 
     # IPA 下载
     location ^~ /$REPO_PATH/ipa/ {
+        if (\$arg_token != "$ACCESS_TOKEN") { return 403; }
         alias /data/ipa/;
         autoindex on;
         autoindex_exact_size off;
@@ -120,6 +141,16 @@ server {
         autoindex on;
         autoindex_exact_size off;
         autoindex_localtime on;
+    }
+
+    # 软件源解锁验证接口：Esign/轻松签点“解锁”后会把 udid + code POST 到这里。
+    # 这里反代到 WebUI 后端 /auth，不需要 WebUI 登录 Cookie，只校验 unlock.json 里的解锁码。
+    location = /$REPO_PATH/auth {
+        proxy_pass http://127.0.0.1:8085/auth;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
     # WebUI 内部下载代理（让 webui 的"下载"按钮即使不知道解锁码也能下）
