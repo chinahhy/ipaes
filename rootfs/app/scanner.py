@@ -15,9 +15,9 @@ from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse, quote
 
-# 轻松签/全能签/魔力签类软件源锁定下载字段：
-# - apps[].isNeedlock=1 后客户端按钮显示“解锁”
-# - news.url 提供解锁验证接口；news.key 与接口返回 md5(key+udid) 配套
+# 客户端不再启用 Esign 解锁码：安全边界只放在服务端 token URL。
+# - apps[].isNeedlock=0 后客户端直接显示“下载”
+# - news.isUnlock=0 / news.url 为空，避免 Esign 再弹解锁流程
 LOCK_AUTH_KEY = os.environ.get("IPA_LOCK_AUTH_KEY", "hoya_ipa_lock_v1")
 # 服务端真实鉴权 token：写进订阅 URL 和 IPA 下载 URL；没有 token 的请求由 nginx 拦截。
 ACCESS_TOKEN = os.environ.get("IPA_ACCESS_TOKEN", "").strip()
@@ -176,7 +176,7 @@ def build_app_entry(meta: dict) -> dict:
         "localizedDescription": f"From {meta['ipa_filename']}",
         "downloadURL": ipa_url, "size": meta["size"],
         "minOSVersion": meta["minOSVersion"], "maxOSVersion": "99.0",
-        "isNeedlock": 1, "appType": 1,
+        "isNeedlock": 0, "appType": 1,
     }
 
     return {
@@ -188,7 +188,7 @@ def build_app_entry(meta: dict) -> dict:
         "version": meta["version"], "versionDate": date_str,
         "versionDescription": f"From {meta['ipa_filename']}",
         "downloadURL": ipa_url, "size": meta["size"],
-        "isNeedlock": 1, "appType": 1,
+        "isNeedlock": 0, "appType": 1,
     }
 
 def _safe_mkdir(p: Path):
@@ -268,13 +268,13 @@ def scan():
         "apps": final_apps,
         "news": {
             "title": REPO_NAME,
-            "caption": "输入解锁码后即可下载 IPA 安装包。",
+            "caption": "此源使用专属 token URL 访问；请勿外传订阅链接。",
             "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "key": LOCK_AUTH_KEY,
             "tintColor": "3478F6",
-            "isUnlock": 1,
+            "isUnlock": 0,
             "imageURL": f"{BASE_URL}/icons/_repo.png",
-            "url": f"{BASE_URL}/auth",
+            "url": "",
             "pay": "",
         },
     }
