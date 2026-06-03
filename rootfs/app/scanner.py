@@ -21,6 +21,12 @@ from urllib.parse import urlparse, quote
 LOCK_AUTH_KEY = os.environ.get("IPA_LOCK_AUTH_KEY", "hoya_ipa_lock_v1")
 # 服务端真实鉴权 token：写进订阅 URL 和 IPA 下载 URL；没有 token 的请求由 nginx 拦截。
 ACCESS_TOKEN = os.environ.get("IPA_ACCESS_TOKEN", "").strip()
+if not ACCESS_TOKEN:
+    try:
+        _unlock_conf = json.loads(Path("/config/unlock.json").read_text())
+        ACCESS_TOKEN = str(_unlock_conf.get("token") or "").strip()
+    except Exception:
+        ACCESS_TOKEN = ""
 
 def with_access_token(url: str) -> str:
     """给 repo.json 里的下载链接追加 token 参数；token 值不写入日志。"""
@@ -30,9 +36,24 @@ def with_access_token(url: str) -> str:
     return f"{url}{sep}token={quote(ACCESS_TOKEN)}"
 
 # ===== 配置（全部来自环境变量）=====
-BASE_URL = os.environ.get("REPO_BASE_URL", "https://example.com/repo")
+BASE_URL = os.environ.get("REPO_BASE_URL", "https://example.com/repo").rstrip("/")
 REPO_NAME = os.environ.get("REPO_NAME", "Private IPA Repo")
 REPO_IDENTIFIER = os.environ.get("REPO_IDENTIFIER", "com.private.ipa.repo")
+
+# unlock.json 的 code 才是 nginx 当前真实入口路径；环境里的 REPO_BASE_URL 可能是旧路径。
+# 因此扫描生成 repo.json 时，用 code 覆盖 BASE_URL 最后一段，避免下载 URL 指向旧路径。
+try:
+    _unlock_code = str(json.loads(Path("/config/unlock.json").read_text()).get("code") or "").strip()
+except Exception:
+    _unlock_code = ""
+if _unlock_code:
+    _p = urlparse(BASE_URL)
+    _parts = [p for p in _p.path.split("/") if p]
+    if _parts:
+        _parts[-1] = _unlock_code
+    else:
+        _parts = [_unlock_code]
+    BASE_URL = _p._replace(path="/" + "/".join(_parts), query="", fragment="").geturl().rstrip("/")
 
 # 从 BASE_URL 提取路径部分作为 repo 目录名
 # e.g. https://ipa.example.com/x7k9m2hP → repo_dir = x7k9m2hP
@@ -155,7 +176,7 @@ def build_app_entry(meta: dict) -> dict:
         "localizedDescription": f"From {meta['ipa_filename']}",
         "downloadURL": ipa_url, "size": meta["size"],
         "minOSVersion": meta["minOSVersion"], "maxOSVersion": "99.0",
-        "isNeedlock": 0, "appType": 1,
+        "isNeedlock": 1, "appType": 1,
     }
 
     return {
@@ -167,7 +188,7 @@ def build_app_entry(meta: dict) -> dict:
         "version": meta["version"], "versionDate": date_str,
         "versionDescription": f"From {meta['ipa_filename']}",
         "downloadURL": ipa_url, "size": meta["size"],
-        "isNeedlock": 0, "appType": 1,
+        "isNeedlock": 1, "appType": 1,
     }
 
 def _safe_mkdir(p: Path):
@@ -247,13 +268,13 @@ def scan():
         "apps": final_apps,
         "news": {
             "title": REPO_NAME,
-            "caption": "此源使用专属 token URL 访问；请勿外传订阅链接。",
+            "caption": "输入解锁码后即可下载 IPA 安装包。",
             "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "key": LOCK_AUTH_KEY,
             "tintColor": "3478F6",
-            "isUnlock": 0,
+            "isUnlock": 1,
             "imageURL": f"{BASE_URL}/icons/_repo.png",
-            "url": "",
+            "url": f"{BASE_URL}/auth",
             "pay": "",
         },
     }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # IPA Self-Host WebUI backend (Flask)
 # Config CRUD + IPA file mgmt + scan trigger + log streaming
-import os, json, shutil, subprocess, time, base64
+import os, json, shutil, subprocess, time, base64, hashlib
 from datetime import datetime
 from pathlib import Path
 from functools import wraps
@@ -382,6 +382,30 @@ def api_set_unlock():
     new_conf.update({"enabled": enabled, "code": code})
     p.write_text(json.dumps(new_conf, ensure_ascii=False, indent=2))
     return jsonify({"ok": True, "msg": "已保存。需要重启容器生效（点右上 ↻ 重启按钮）"})
+
+@app.route("/auth", methods=["GET", "POST"])
+def esign_unlock_auth():
+    """Esign/轻松签解锁接口：验证 code，返回 md5(news.key + udid)。
+
+    说明：这只控制客户端“解锁/下载”按钮；真正的源和 IPA 防外传仍由 nginx token URL 校验。
+    """
+    conf_path = Path("/config/unlock.json")
+    conf = {}
+    if conf_path.exists():
+        try:
+            conf = json.loads(conf_path.read_text())
+        except Exception:
+            conf = {}
+    expected = str(conf.get("code") or "")
+    got = (request.values.get("code") or request.values.get("password") or "").strip()
+    udid = (request.values.get("udid") or request.values.get("UDID") or "").strip()
+    lock_key = os.environ.get("IPA_LOCK_AUTH_KEY", "hoya_ipa_lock_v1")
+    if not expected or got != expected:
+        return jsonify({"code": 1, "msg": "解锁码错误", "data": ""}), 403
+    if not udid:
+        return jsonify({"code": 2, "msg": "缺少 UDID", "data": ""}), 400
+    digest = hashlib.md5((lock_key + udid).encode("utf-8")).hexdigest()
+    return jsonify({"code": 0, "msg": "解锁成功", "data": digest})
 
 # ============ API: 修改 WebUI 密码 ============
 @app.route("/api/password", methods=["PUT"])
