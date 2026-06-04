@@ -103,7 +103,7 @@
     <div class="tab" :class="{on:tab==='groups'}" @click="tab='groups'">📡 群组</div>
     <div class="tab" :class="{on:tab==='whitelist'}" @click="tab='whitelist'">📦 关键词</div>
     <div class="tab" :class="{on:tab==='ipa'}" @click="tab='ipa'">💾 IPA 文件</div>
-    <div class="tab" :class="{on:tab==='unlock'}" @click="tab='unlock'">🔐 解锁码</div>
+    <div class="tab" :class="{on:tab==='unlock'}" @click="tab='unlock'">🔐 访问控制</div>
     <div class="tab" :class="{on:tab==='account'}" @click="tab='account'">👤 账号</div>
     <div class="tab" :class="{on:tab==='settings'}" @click="tab='settings'">⚙️ 速率</div>
     <div class="tab" :class="{on:tab==='logs'}" @click="tab='logs'">📜 日志</div>
@@ -201,28 +201,59 @@
     </template>
   </div>
 
-  <!-- TAB: 解锁码 -->
+  <!-- TAB: 访问控制 -->
   <div x-show="tab==='unlock'" class="card">
-    <h2>软件源解锁码</h2>
+    <h2>🔐 访问控制</h2>
     <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
-      订阅链接 = <code>https://your-host/<b x-text="unlock.enabled ? unlock.code : 'repo'"></b></code>。
-      <br>开启后，必须知道解锁码才能访问订阅源；关闭则路径固定为 <code>/repo</code>。
-      <br><b style="color:var(--warn)">改完需要重启容器才生效（点下方按钮）。</b>
+      订阅链接通过服务端 <b>Token</b> 防外传——只有 URL 里带正确 token 的请求才能访问软件源和下载 IPA。<br>
+      客户端（Esign/轻松签）无需输入解锁码，直接添加完整源链接即可。<br>
+      <b style="color:var(--warn)">⚠️ 重新生成 Token 后，所有已分享的订阅链接立即失效，必须用新链接重新订阅！</b>
     </div>
-    <div class="row">
-      <div class="grow">启用解锁码</div>
-      <label class="switch">
-        <input type="checkbox" x-model="unlock.enabled">
-        <span class="slider"></span>
-      </label>
+
+    <!-- Token 管理 -->
+    <div style="border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:14px;background:#0d1117">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:600">访问 Token</div>
+        <span style="font-size:11px" :style="{color: unlock.has_token ? 'var(--ok)' : 'var(--danger)'}"
+              x-text="unlock.has_token ? '✅ 已启用' : '❌ 未设置'"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <code style="flex:1;background:#161b22;padding:6px 10px;border-radius:4px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              x-text="unlock.token_preview || '(未设置)'"></code>
+        <button class="danger sm" @click="regenerateToken()"
+                :disabled="!unlock.has_token"
+                :title="unlock.has_token ? '重新生成 Token（旧链接失效）' : '未设置 Token'">🔄 重新生成</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">
+        Token 只在创建时完整显示一次；这里只展示首尾4位指纹，用于比对确认。<br>
+        完整订阅链接请查看 Obsidian 技术档案。
+      </div>
     </div>
-    <div class="row">
-      <div style="width:120px">解锁码</div>
-      <input style="flex:1" x-model="unlock.code" :disabled="!unlock.enabled"
-             placeholder="4-32 位字母数字" maxlength="32">
+
+    <!-- 订阅路径 -->
+    <div style="border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:14px;background:#0d1117">
+      <div style="font-weight:600;margin-bottom:8px">订阅路径</div>
+      <div class="row" style="border:none;padding:4px 0">
+        <div style="width:80px;font-size:12px;color:var(--muted)">路径</div>
+        <code style="flex:1;background:#161b22;padding:6px 10px;border-radius:4px;font-size:13px"
+              x-text="'/' + (unlock.enabled ? unlock.code : 'repo')"></code>
+      </div>
+      <div class="row" style="border:none;padding:4px 0">
+        <div style="width:80px;font-size:12px;color:var(--muted)">启用</div>
+        <label class="switch">
+          <input type="checkbox" x-model="unlock.enabled">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="row" style="border:none;padding:4px 0" x-show="unlock.enabled">
+        <div style="width:80px;font-size:12px;color:var(--muted)">路径码</div>
+        <input style="flex:1" x-model="unlock.code" :disabled="!unlock.enabled"
+               placeholder="4-32 位字母数字" maxlength="32">
+      </div>
     </div>
+
     <div style="margin-top:14px;display:flex;gap:10px">
-      <button class="pri" @click="saveUnlock()">💾 保存</button>
+      <button class="pri" @click="saveUnlock()">💾 保存路径</button>
       <button class="warn" @click="restartContainer()">↻ 保存并重启容器</button>
     </div>
   </div>
@@ -305,7 +336,7 @@ function ipaApp() {
     tab: 'groups',
     cfg: { groups:[], priority_groups:[], whitelist:[], rate_limit:{} },
     status: {},
-    unlock: { enabled:true, code:'142536' },
+    unlock: { enabled:true, code:'142536', token_preview:'', has_token:false },
     pw: { old:'', new:'', confirm:'' },
     ipaList: [],
     selected: [],
@@ -466,10 +497,16 @@ function ipaApp() {
       this.showToast('已保存');
     },
 
-    // 解锁码
+    // 访问控制
     async saveUnlock() {
       await this.api('PUT', '/api/unlock', this.unlock);
       this.showToast('已保存（需重启容器生效）');
+    },
+    async regenerateToken() {
+      if (!confirm('重新生成 Token？\n\n⚠️ 所有已分享的订阅链接将立即失效！\n必须在手机上用新链接重新订阅。\n\n确定？')) return;
+      const r = await this.api('DELETE', '/api/unlock');
+      await this.loadUnlock();
+      this.showToast('Token 已重新生成！新指纹: ' + r.token_preview + '（需重启容器生效）');
     },
     async restartContainer() {
       await this.api('PUT', '/api/unlock', this.unlock);

@@ -349,20 +349,50 @@ def api_get_log(name):
 @app.route("/api/unlock", methods=["GET"])
 @require_auth
 def api_get_unlock():
-    """读取当前解锁码状态（从 /config/unlock.json）"""
+    """读取当前订阅源配置（从 /config/unlock.json）"""
     p = Path("/config/unlock.json")
+    conf = {}
     if p.exists():
         try:
-            return jsonify(json.loads(p.read_text()))
+            conf = json.loads(p.read_text())
         except Exception:
             pass
     # 默认值
-    return jsonify({"enabled": True, "code": "142536"})
+    code = conf.get("code") or "142536"
+    enabled = conf.get("enabled", True)
+    token = str(conf.get("token") or "").strip()
+    # token 只返回前后4字符，防泄露
+    token_preview = f"{token[:4]}...{token[-4:]}" if len(token) > 8 else "(未设置)"
+    return jsonify({
+        "enabled": enabled,
+        "code": code,
+        "token_preview": token_preview,
+        "has_token": bool(token),
+    })
+
+@app.route("/api/unlock", methods=["DELETE"])
+@require_auth
+def api_regenerate_token():
+    """重新生成服务端访问 token。旧 token 立即失效，重启后生效。
+    ⚠️ 重新生成后所有已分享的订阅链接需要更新！
+    """
+    p = Path("/config/unlock.json")
+    conf = {}
+    if p.exists():
+        try:
+            conf = json.loads(p.read_text())
+        except Exception:
+            conf = {}
+    import secrets as _secrets
+    new_token = _secrets.token_urlsafe(24)
+    conf["token"] = new_token
+    p.write_text(json.dumps(conf, ensure_ascii=False, indent=2))
+    return jsonify({"ok": True, "msg": "Token 已重新生成。需要重启容器生效，且所有订阅链接需要更新。", "token_preview": f"{new_token[:4]}...{new_token[-4:]}"})
 
 @app.route("/api/unlock", methods=["PUT"])
 @require_auth
 def api_set_unlock():
-    """修改解锁码 / 开关。改完需要重启容器才能让 nginx 生效。"""
+    """修改订阅路径 / 开关。改完需要重启容器才能让 nginx 生效。"""
     data = request.get_json(force=True) or {}
     enabled = bool(data.get("enabled", True))
     code = (data.get("code") or "").strip()
