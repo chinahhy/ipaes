@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <title>IPA Self-Host 控制台</title>
+<link rel="icon" type="image/svg+xml" href="/static/brand-icon.svg">
+<link rel="apple-touch-icon" href="/static/brand-icon.svg">
 <script>
 (function() {
   try {
@@ -116,12 +118,9 @@
     width:44px;
     height:44px;
     border-radius:14px;
-    display:grid;
-    place-items:center;
-    font-weight:900;
-    letter-spacing:.04em;
-    color:#fff;
-    background:linear-gradient(135deg, var(--accent), var(--accent-strong));
+    display:block;
+    object-fit:cover;
+    background:var(--accent);
     box-shadow:0 12px 28px var(--accent-soft);
   }
   .brand h1 {
@@ -220,37 +219,12 @@
   .subbar {
     border-radius:20px;
     padding:12px;
-    display:grid;
-    grid-template-columns:minmax(0,1fr) auto;
-    gap:12px;
+    display:flex;
     align-items:center;
   }
   .tabs {
     overflow:auto;
-  }
-  .stats {
-    display:flex;
-    gap:8px;
-    flex-wrap:wrap;
-    justify-content:flex-end;
-  }
-  .stat {
-    min-width:84px;
-    padding:10px 12px;
-    border-radius:14px;
-    border:1px solid var(--line);
-    background:var(--panel);
-  }
-  .stat b {
-    display:block;
-    font-size:18px;
-    line-height:1.1;
-  }
-  .stat span {
-    display:block;
-    margin-top:3px;
-    color:var(--muted);
-    font-size:12px;
+    width:100%;
   }
 
   .view { animation:viewIn .18s ease both }
@@ -371,6 +345,18 @@
   }
   .app-info p {
     margin:3px 0 0;
+    color:var(--muted);
+    font-size:12px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .app-info .app-desc {
+    color:var(--text-2);
+  }
+  .app-meta-line {
+    display:block;
+    margin-top:2px;
     color:var(--muted);
     font-size:12px;
     white-space:nowrap;
@@ -652,12 +638,8 @@
     }
   }
   @media (max-width:1080px) {
-    .subbar,
     .grid.two {
       grid-template-columns:1fr;
-    }
-    .stats {
-      justify-content:flex-start;
     }
   }
   @media (max-width:820px) {
@@ -724,7 +706,7 @@
 <div class="app-shell" x-data="ipaApp()" x-init="init()">
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark">IPA</div>
+      <img class="brand-mark" src="/static/brand-icon.svg" alt="">
       <div>
         <h1>IPA Self-Host</h1>
         <span x-text="workspaceLabel()"></span>
@@ -748,12 +730,6 @@
         <button type="button" :class="{active:workspace===w.id}" @click="setWorkspace(w.id)" x-text="w.name"></button>
       </template>
     </nav>
-    <div class="stats">
-      <div class="stat"><b x-text="status.ipa_count || ipaList.length || 0"></b><span>IPA</span></div>
-      <div class="stat"><b x-text="appGroups.length"></b><span>应用</span></div>
-      <div class="stat"><b x-text="(cfg.groups || []).length"></b><span>群组</span></div>
-      <div class="stat"><b x-text="(cfg.whitelist || []).length"></b><span>规则</span></div>
-    </div>
   </section>
 
   <section class="view" x-show="workspace==='apps'" x-cloak x-transition.opacity.duration.150ms>
@@ -761,7 +737,7 @@
       <div class="panel-head">
         <div class="head-block">
           <h2>应用</h2>
-          <span x-text="(filteredApps().length || 0) + ' / ' + appGroups.length"></span>
+          <span x-text="appSearch ? '筛选中' : '最近更新'"></span>
         </div>
         <button type="button" class="btn sm" @click="loadIpa()">刷新列表</button>
       </div>
@@ -796,12 +772,12 @@
             <article class="app-row">
               <button type="button" class="app-main" @click="app.expanded = !app.expanded">
                 <div class="app-icon">
-                  <img :src="app.icon ? '/static/icons/' + app.icon : ''" x-show="app.icon" @error="$el.style.display='none'; app.icon=null">
-                  <span x-show="!app.icon" x-text="app.name.charAt(0)"></span>
+                  <img :src="appIconSrc(app)" @error="handleIconError($event, app)" alt="">
                 </div>
                 <div class="app-info">
                   <h3 x-text="app.name"></h3>
-                  <p x-text="app.versions.length + ' 个版本 · 最新 v' + (app.versions[0]?.version || '-')"></p>
+                  <p class="app-desc" x-text="app.description"></p>
+                  <span class="app-meta-line" x-text="app.versions.length + ' 个版本 · 最新 v' + (app.versions[0]?.version || '-')"></span>
                 </div>
                 <span class="app-pill" x-text="(app.versions[0]?.size_mb || '-') + ' MB'"></span>
                 <span class="app-time" x-text="app.versions[0]?.mtime_str || '-'"></span>
@@ -832,7 +808,7 @@
         <div class="panel-head">
           <div class="head-block">
             <h2>群组</h2>
-            <span x-text="(cfg.groups || []).length + ' 个来源'"></span>
+            <span>来源</span>
           </div>
         </div>
         <div class="panel-body">
@@ -869,7 +845,7 @@
         <div class="panel-head">
           <div class="head-block">
             <h2>白名单</h2>
-            <span x-text="(cfg.whitelist || []).length + ' 个应用'"></span>
+            <span>关键词</span>
           </div>
         </div>
         <div class="panel-body">
@@ -1072,6 +1048,42 @@
 </div>
 
 <script>
+const APP_DESC = {
+  '小红书': '笔记、攻略、本地生活。',
+  'YouTube': '视频、订阅、播放列表。',
+  'YouTube Music': '音乐、歌单、播客。',
+  '哔哩哔哩': '番剧、视频、直播。',
+  'Spotify': '音乐、歌单、播客。',
+  '高德地图': '路线、导航、实时路况。',
+  '百度地图': '路线、公交、位置搜索。',
+  '闲鱼': '二手交易和闲置转让。',
+  'Swiftgram': 'Telegram 第三方客户端。',
+  'Infuse': '本地和网络视频播放器。',
+  '知乎': '问答、讨论、知识社区。',
+  'PiliPlus': '清爽的哔哩哔哩第三方客户端。',
+  '抖音': '短视频、直播、创作。',
+  'Facebook': '社交动态和好友联系。',
+  'X': '实时信息和社交讨论。',
+  'Shadowrocket': 'iOS 网络代理工具。',
+  'Bit远控助手': '远程控制工具。',
+};
+
+function describeApp(name) {
+  const n = String(name || '').trim();
+  if (APP_DESC[n]) return APP_DESC[n];
+  const lower = n.toLowerCase();
+  if (lower.includes('pili')) return APP_DESC.PiliPlus;
+  if (lower.includes('youtube')) return APP_DESC.YouTube;
+  if (lower.includes('bili')) return APP_DESC['哔哩哔哩'];
+  return 'iOS 应用安装包。';
+}
+
+function fallbackAppIcon(name) {
+  const lower = String(name || '').toLowerCase();
+  if (lower.includes('pili')) return '/static/app-icons/piliplus.svg';
+  return '/static/app-icons/default.svg';
+}
+
 function normalizeThemeMode(mode) {
   return ['dark', 'light', 'auto'].includes(mode) ? mode : 'dark';
 }
@@ -1178,10 +1190,26 @@ function ipaApp() {
       for (const app of this.appGroups) app.expanded = open;
     },
 
+    appIconSrc(app) {
+      if (app.icon && !app.iconFailed) return '/static/icons/' + encodeURIComponent(app.icon);
+      return fallbackAppIcon(app.name);
+    },
+
+    handleIconError(event, app) {
+      if (!app.iconFailed) {
+        app.iconFailed = true;
+        event.target.src = fallbackAppIcon(app.name);
+        return;
+      }
+      event.target.onerror = null;
+      event.target.src = '/static/app-icons/default.svg';
+    },
+
     filteredApps() {
       const q = this.appSearch.trim().toLowerCase();
       let arr = this.appGroups.filter((app) => !q ||
         app.name.toLowerCase().includes(q) ||
+        app.description.toLowerCase().includes(q) ||
         app.versions.some((v) =>
           (v.filename || '').toLowerCase().includes(q) ||
           String(v.version || '').toLowerCase().includes(q)
@@ -1203,7 +1231,16 @@ function ipaApp() {
       const map = {};
       for (const f of this.ipaList) {
         const name = f.app_name || f.filename.replace(/_\d+[\.\d]*_.+\.ipa$/, '');
-        if (!map[name]) map[name] = { name, icon: null, versions: [], expanded: this.expandAll };
+        if (!map[name]) {
+          map[name] = {
+            name,
+            description: describeApp(name),
+            icon: null,
+            iconFailed: false,
+            versions: [],
+            expanded: this.expandAll,
+          };
+        }
         if (f.icon && !map[name].icon) map[name].icon = f.icon;
         map[name].versions.push(f);
       }

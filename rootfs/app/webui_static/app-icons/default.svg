@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="App">
+  <defs>
+    <linearGradient id="d" x1="18" y1="12" x2="80" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6aa3ff"/>
+      <stop offset="1" stop-color="#335dff"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="24" fill="url(#d)"/>
+  <rect x="25" y="25" width="18" height="18" rx="6" fill="#fff" opacity=".96"/>
+  <rect x="53" y="25" width="18" height="18" rx="6" fill="#fff" opacity=".78"/>
+  <rect x="25" y="53" width="18" height="18" rx="6" fill="#fff" opacity=".78"/>
+  <rect x="53" y="53" width="18" height="18" rx="6" fill="#fff" opacity=".96"/>
+</svg>

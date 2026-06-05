@@ -719,6 +719,8 @@ def index():
 @app.route("/static/<path:p>")
 @require_auth
 def static_files(p):
+    if p.startswith("icons/"):
+        return send_from_directory(ICONS_DIR, p.removeprefix("icons/"))
     return send_from_directory(STATIC_DIR, p)
 
 @app.route("/static/icons/<path:p>")
