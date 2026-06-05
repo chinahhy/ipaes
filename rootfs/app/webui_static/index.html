@@ -3,404 +3,627 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>IPA Self-Host 控制台</title>
+<script>
+(function() {
+  try {
+    const mode = localStorage.getItem('ipa-theme-mode') || 'dark';
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const theme = mode === 'auto' ? (mins >= 360 && mins < 1080 ? 'light' : 'dark') : mode;
+    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+</script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
 <style>
   :root {
-    --bg:#0f1419; --card:#1a2028; --line:#252d38;
-    --text:#e6edf3; --muted:#7d8590;
-    --primary:#388bfd; --danger:#f85149; --warn:#d29922; --ok:#3fb950;
-    --sidebar-bg:#0d1117; --sidebar-hover:#1a2028; --sidebar-active:#1a2332;
+    color-scheme:dark;
+    --bg:#0b0f16; --bg-soft:#101721; --surface:#151d29; --surface-2:#1b2533;
+    --surface-glass:rgba(21,29,41,.82); --line:#2b3646; --line-soft:#202a38;
+    --text:#f3f7fb; --muted:#92a0b3; --faint:#66758a;
+    --primary:#4f8cff; --primary-strong:#2f6fed; --primary-soft:rgba(79,140,255,.14);
+    --accent:#30d5a8; --accent-soft:rgba(48,213,168,.14);
+    --danger:#ff7a7a; --danger-bg:#df3f45; --danger-soft:rgba(255,122,122,.12);
+    --warn:#f2bd4b; --warn-soft:rgba(242,189,75,.13); --ok:#42d392;
+    --input:#0f151f; --shadow:0 24px 70px rgba(0,0,0,.32);
+    --shadow-soft:0 14px 34px rgba(0,0,0,.18); --radius:18px;
+    --sidebar:rgba(13,18,27,.92); --sidebar-active:rgba(79,140,255,.16);
+    --hero-a:#132137; --hero-b:#0d1f23; --hero-c:#1d1830;
   }
   [data-theme="light"] {
-    --bg:#f6f8fa; --card:#fff; --line:#d0d7de;
-    --text:#1f2328; --muted:#656d76;
-    --primary:#0969da; --danger:#cf222e; --warn:#9a6700; --ok:#1a7f37;
-    --sidebar-bg:#f6f8fa; --sidebar-hover:#eaeef2; --sidebar-active:#ddf4ff;
+    color-scheme:light;
+    --bg:#f4f7fb; --bg-soft:#edf2f7; --surface:#fff; --surface-2:#f7f9fc;
+    --surface-glass:rgba(255,255,255,.86); --line:#dbe3ee; --line-soft:#e9eef5;
+    --text:#172033; --muted:#5e6d83; --faint:#8290a3;
+    --primary:#2563eb; --primary-strong:#1d4ed8; --primary-soft:rgba(37,99,235,.11);
+    --accent:#0f9f77; --accent-soft:rgba(15,159,119,.11);
+    --danger:#d92d3a; --danger-bg:#d92d3a; --danger-soft:rgba(217,45,58,.1);
+    --warn:#9a6700; --warn-soft:rgba(154,103,0,.12); --ok:#168a4a;
+    --input:#fff; --shadow:0 24px 70px rgba(20,33,55,.13);
+    --shadow-soft:0 14px 34px rgba(20,33,55,.1); --sidebar:rgba(255,255,255,.9);
+    --sidebar-active:rgba(37,99,235,.11); --hero-a:#e8f0ff; --hero-b:#e7fbf4; --hero-c:#f3edff;
   }
+
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-       font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  [x-cloak]{display:none!important}
+  html{min-height:100%;background:var(--bg);color:var(--text)}
+  body{
+    margin:0;min-height:100vh;color:var(--text);
+    font:14px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
+    background:
+      radial-gradient(circle at 18% 8%, color-mix(in srgb,var(--primary) 22%, transparent), transparent 34%),
+      radial-gradient(circle at 90% 12%, color-mix(in srgb,var(--accent) 18%, transparent), transparent 30%),
+      linear-gradient(180deg,var(--bg),var(--bg-soft));
+  }
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{border:0;cursor:pointer}
+  button:disabled{cursor:not-allowed;opacity:.62}
+  a{color:var(--primary);text-decoration:none}
+  a:hover{text-decoration:underline}
 
-  /* 主布局: 左侧栏 + 内容 */
-  .app{display:flex;min-height:100vh}
-  .sidebar{width:220px;background:var(--sidebar-bg);border-right:1px solid var(--line);
-           flex-shrink:0;display:flex;flex-direction:column;padding:0;z-index:10}
-  .sidebar-logo{padding:20px 16px 16px;border-bottom:1px solid var(--line)}
-  .sidebar-logo h1{font-size:16px;margin:0;font-weight:600}
-  .sidebar-logo .sub{font-size:11px;color:var(--muted);margin-top:2px}
-  .sidebar-nav{flex:1;padding:8px 0;overflow-y:auto}
-  .sidebar-nav .nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;
-      cursor:pointer;color:var(--muted);font-size:13px;transition:all .15s;border-left:3px solid transparent}
-  .nav-item:hover{background:var(--sidebar-hover);color:var(--text)}
-  .nav-item.active{color:var(--text);background:var(--sidebar-active);border-left-color:var(--primary);font-weight:500}
-  .nav-item .icon{font-size:16px;width:20px;text-align:center}
-  .sidebar-bottom{padding:12px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
-  .sidebar-bottom select{font-size:12px;padding:4px 8px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:4px;width:100%}
-  .sidebar-bottom .logout-btn{font-size:12px;padding:6px;width:100%;text-align:center;background:none;border:1px solid var(--line);color:var(--muted);border-radius:4px;cursor:pointer}
-  .sidebar-bottom .logout-btn:hover{color:var(--danger);border-color:var(--danger)}
+  .app-shell{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:100vh}
+  .sidebar{
+    position:sticky;top:0;height:100vh;padding:18px;display:flex;flex-direction:column;gap:16px;
+    background:var(--sidebar);border-right:1px solid var(--line-soft);
+    backdrop-filter:blur(22px);z-index:10;
+  }
+  .brand-card{
+    position:relative;overflow:hidden;border:1px solid var(--line);border-radius:22px;padding:18px;
+    background:linear-gradient(145deg,var(--surface),var(--surface-2));box-shadow:var(--shadow-soft);
+  }
+  .brand-card:before{
+    content:"";position:absolute;inset:-80px -60px auto auto;width:160px;height:160px;border-radius:50%;
+    background:linear-gradient(135deg,var(--primary),var(--accent));opacity:.18;filter:blur(2px);
+  }
+  .brand-top{position:relative;display:flex;align-items:center;gap:12px}
+  .brand-mark{
+    width:46px;height:46px;border-radius:15px;display:grid;place-items:center;font-weight:800;letter-spacing:.5px;
+    background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;box-shadow:0 12px 28px color-mix(in srgb,var(--primary) 34%, transparent);
+  }
+  .brand-title{font-size:16px;font-weight:760;line-height:1.15}
+  .brand-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .live-chip{
+    position:relative;margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:9px 11px;border-radius:14px;background:var(--primary-soft);color:var(--text);font-size:12px;
+  }
+  .live-chip span:first-child{display:flex;align-items:center;gap:7px;color:var(--muted)}
+  .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 45%, transparent);animation:pulse 2.2s infinite}
 
-  .main{flex:1;min-width:0;overflow-y:auto;padding:24px}
-  .main-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
-  .main-head h2{margin:0;font-size:18px;font-weight:600}
-  .main-head .stat{color:var(--muted);font-size:13px}
-  .main-head .stat b{color:var(--text);margin:0 4px}
-  .main-head .actions{display:flex;gap:8px;align-items:center}
+  .sidebar-nav{display:flex;flex-direction:column;gap:6px;overflow:auto;padding-right:2px}
+  .nav-item{
+    width:100%;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:16px;
+    background:transparent;color:var(--muted);text-align:left;transition:transform .18s ease,background .18s ease,color .18s ease;
+  }
+  .nav-item:hover{background:var(--surface-2);color:var(--text);transform:translateX(3px)}
+  .nav-item.active{background:var(--sidebar-active);color:var(--text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 24%, transparent)}
+  .nav-icon{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-soft)}
+  .nav-copy{min-width:0}
+  .nav-copy b{display:block;font-size:13px;font-weight:700}
+  .nav-copy small{display:block;font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-  /* 通用 */
-  .card{background:var(--card);border:1px solid var(--line);
-        border-radius:8px;padding:16px;margin-bottom:14px}
-  .card h3{margin:0 0 12px;font-size:15px;font-weight:600}
-  .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
-  .row:last-child{border:none}
+  .side-card{
+    margin-top:auto;border:1px solid var(--line);border-radius:20px;padding:12px;background:var(--surface-glass);
+    box-shadow:var(--shadow-soft);
+  }
+  .theme-title{font-size:12px;color:var(--muted);margin:0 0 9px 2px}
+  .theme-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:4px;border-radius:15px;background:var(--bg)}
+  .theme-tabs button{
+    padding:7px 6px;border-radius:11px;background:transparent;color:var(--muted);font-size:12px;transition:all .18s ease;
+  }
+  .theme-tabs button.active{background:var(--surface);color:var(--text);box-shadow:0 8px 20px color-mix(in srgb,var(--primary) 12%, transparent)}
+  .theme-current{margin:9px 2px 11px;color:var(--faint);font-size:12px}
+  .logout-btn{
+    width:100%;padding:9px 10px;border-radius:13px;background:transparent;color:var(--muted);
+    border:1px solid var(--line);transition:all .18s ease;
+  }
+  .logout-btn:hover{color:var(--danger);border-color:var(--danger);background:var(--danger-soft)}
+
+  .main{min-width:0;padding:24px;overflow:hidden}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+  .eyebrow{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.08em}
+  .title-block h1{font-size:26px;line-height:1.1;margin:7px 0 5px;font-weight:800;letter-spacing:0}
+  .title-block p{margin:0;color:var(--muted);max-width:620px}
+  .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .btn{
+    min-height:38px;border-radius:13px;padding:9px 13px;border:1px solid var(--line);
+    background:var(--surface-glass);color:var(--text);box-shadow:0 10px 24px color-mix(in srgb,var(--bg) 22%, transparent);
+    transition:transform .18s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease;
+  }
+  .btn:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--primary) 44%, var(--line));box-shadow:0 16px 34px color-mix(in srgb,var(--primary) 12%, transparent)}
+  .btn.primary{border-color:transparent;background:linear-gradient(135deg,var(--primary),var(--primary-strong));color:#fff}
+  .btn.primary:hover{box-shadow:0 18px 42px color-mix(in srgb,var(--primary) 32%, transparent)}
+  .btn.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 46%, var(--line));background:var(--danger-soft)}
+  .btn.danger:hover{background:var(--danger-bg);border-color:var(--danger-bg);color:#fff}
+  .btn.ghost{background:transparent;box-shadow:none}
+  .btn.sm{min-height:30px;padding:5px 9px;border-radius:10px;font-size:12px}
+  .btn.icon{min-width:38px;padding:8px}
+  .scan-spin{display:inline-block;transition:transform .25s ease}
+  .btn:hover .scan-spin{transform:rotate(30deg)}
+  .btn.primary[disabled] .scan-spin{animation:spin 1.1s linear infinite}
+
+  .hero-panel{
+    position:relative;overflow:hidden;border:1px solid var(--line);border-radius:26px;padding:20px;margin-bottom:18px;
+    background:
+      linear-gradient(135deg,var(--hero-a),var(--hero-b) 48%,var(--hero-c)),
+      var(--surface);
+    box-shadow:var(--shadow);
+  }
+  .hero-panel:before{
+    content:"";position:absolute;inset:auto 5% -120px auto;width:340px;height:240px;
+    background:linear-gradient(135deg,var(--primary),var(--accent));opacity:.16;filter:blur(34px);transform:rotate(-8deg);
+  }
+  .hero-content{position:relative;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:18px;align-items:stretch}
+  .hero-copy h2{margin:8px 0 8px;font-size:21px;line-height:1.25}
+  .hero-copy p{margin:0;color:var(--muted);max-width:760px}
+  .metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .metric{
+    padding:13px;border-radius:18px;background:color-mix(in srgb,var(--surface) 74%, transparent);
+    border:1px solid color-mix(in srgb,var(--line) 82%, transparent);backdrop-filter:blur(10px);
+  }
+  .metric span{display:block;color:var(--muted);font-size:12px}
+  .metric strong{display:block;font-size:24px;line-height:1.1;margin-top:5px}
+
+  .view{animation:viewIn .24s ease both}
+  .panel{
+    border:1px solid var(--line);border-radius:22px;background:var(--surface-glass);
+    box-shadow:var(--shadow-soft);overflow:hidden;backdrop-filter:blur(18px);
+  }
+  .panel-head{
+    display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:17px 18px;border-bottom:1px solid var(--line-soft);
+  }
+  .panel-head h3{margin:0;font-size:16px}
+  .panel-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+  .panel-body{padding:18px}
+
+  .app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:14px}
+  .app-card{
+    position:relative;overflow:hidden;border:1px solid var(--line);border-radius:22px;padding:16px;
+    background:linear-gradient(180deg,var(--surface),var(--surface-2));transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
+  }
+  .app-card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--primary) 45%, var(--line));box-shadow:0 20px 44px color-mix(in srgb,var(--primary) 12%, transparent)}
+  .app-card-header{display:flex;gap:12px;align-items:center}
+  .app-avatar{
+    width:54px;height:54px;border-radius:16px;overflow:hidden;display:grid;place-items:center;flex-shrink:0;
+    background:linear-gradient(145deg,var(--primary-soft),var(--accent-soft));border:1px solid var(--line);
+    color:var(--primary);font-weight:800;font-size:22px;
+  }
+  .app-avatar img{width:100%;height:100%;object-fit:cover}
+  .app-title{min-width:0}
+  .app-title h3{margin:0;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .app-title span{display:block;margin-top:3px;color:var(--muted);font-size:12px}
+  .app-desc{min-height:38px;margin:13px 0;color:var(--muted);font-size:13px}
+  .app-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .toggle-link{
+    display:inline-flex;align-items:center;gap:7px;padding:7px 0;background:transparent;color:var(--primary);font-weight:680;
+  }
+  .arrow{display:inline-block;transition:transform .2s ease}
+  .arrow.open{transform:rotate(90deg)}
+  .version-list{margin-top:12px;max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .version-list.open{max-height:1600px}
+  .version-item{
+    display:grid;grid-template-columns:minmax(54px,.4fr) minmax(0,1fr) auto auto;gap:8px;align-items:center;
+    padding:10px 0;border-top:1px solid var(--line-soft);font-size:12px;
+  }
+  .version-item .ver{font-weight:760;color:var(--text)}
+  .version-item .meta{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .list{display:flex;flex-direction:column}
+  .list-row{
+    display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-soft);
+  }
+  .list-row:last-child{border-bottom:0}
   .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  button,input,select,textarea{font:inherit;color:inherit;border:1px solid var(--line);
-       background:var(--bg);padding:6px 10px;border-radius:5px;outline:none}
-  button{cursor:pointer;background:var(--card);transition:all .15s}
-  button:hover{border-color:var(--primary)}
-  button.pri{background:var(--primary);border-color:var(--primary);color:#fff}
-  button.pri:hover{filter:brightness(1.1)}
-  button.danger{color:var(--danger);border-color:#3a1f23}
-  button.danger:hover{background:var(--danger);color:#fff;border-color:var(--danger)}
-  button.warn{color:var(--warn);border-color:#3a3000}
-  button.sm{padding:3px 8px;font-size:12px}
-  input,select{width:100%}
-  .addbar{display:flex;gap:8px;margin-top:10px}
-  .addbar input{flex:1}
-  .pill{background:#2a3340;color:var(--muted);padding:2px 8px;
-        border-radius:10px;font-size:11px;margin-right:4px;display:inline-block;margin-bottom:2px}
-  .kw{display:flex;align-items:center;gap:6px;background:var(--bg);
-      border:1px solid var(--line);border-radius:4px;padding:3px 8px;font-size:12px}
-  .kw button{padding:0;border:none;background:none;color:var(--muted);font-size:14px;line-height:1}
-  .kw button:hover{color:var(--danger)}
-  .kws{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-  pre.log{background:var(--bg);border:1px solid var(--line);border-radius:5px;
-       padding:10px;max-height:400px;overflow:auto;font:11px/1.4 Menlo,Monaco,monospace;
-       color:#b1bac4;white-space:pre-wrap;margin:0}
-  .empty{color:var(--muted);text-align:center;padding:30px}
-  .toast{position:fixed;top:20px;right:20px;background:var(--card);
-       border:1px solid var(--line);padding:12px 16px;border-radius:6px;z-index:99;
-       box-shadow:0 4px 12px rgba(0,0,0,.4);max-width:400px}
-  .toast.ok{border-color:var(--ok)} .toast.err{border-color:var(--danger)}
-  .switch{position:relative;display:inline-block;width:42px;height:22px}
-  .switch input{display:none}
-  .slider{position:absolute;inset:0;background:#3a4150;border-radius:22px;
-       cursor:pointer;transition:.2s}
-  .slider:before{content:"";position:absolute;width:16px;height:16px;
-       left:3px;top:3px;background:white;border-radius:50%;transition:.2s}
-  input:checked+.slider{background:var(--primary)}
-  input:checked+.slider:before{transform:translateX(20px)}
-  label.lbl{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
-  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-  .code{font-family:Menlo,monospace;background:var(--bg);padding:2px 6px;border-radius:3px;font-size:12px}
-  .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-  .status-dot.on{background:var(--ok)} .status-dot.off{background:var(--muted)}
+  .muted{color:var(--muted)}
+  .hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .form-grid{display:grid;gap:12px}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .field label,.lbl{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+  .field input,.field select,.field textarea,input,select,textarea{
+    width:100%;border:1px solid var(--line);border-radius:13px;background:var(--input);color:var(--text);
+    padding:10px 12px;outline:none;transition:border-color .18s ease,box-shadow .18s ease,background .18s ease;
+  }
+  .field input:focus,input:focus,select:focus,textarea:focus{
+    border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-soft);
+  }
+  input::placeholder,textarea::placeholder{color:var(--faint)}
+  .addbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;margin-top:12px}
+  .addbar.two{grid-template-columns:minmax(140px,1fr) minmax(200px,2fr) auto}
+  .tag-cloud{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .tag{
+    display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid var(--line);
+    border-radius:999px;background:var(--surface-2);font-size:12px;color:var(--text);
+  }
+  .tag button{background:transparent;color:var(--muted);padding:0}
+  .tag button:hover{color:var(--danger)}
+  .inline-add{min-width:150px;max-width:220px}
+  .status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:7px;background:var(--muted)}
+  .status-dot.on{background:var(--ok)}
+  .code{font-family:Menlo,Monaco,monospace;background:var(--bg);border:1px solid var(--line-soft);padding:4px 8px;border-radius:9px;font-size:12px}
+  .button-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .result-box{margin-top:14px;padding:13px;border-radius:16px;background:var(--bg);border:1px solid var(--line);font-size:13px}
+  .preset-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .preset-grid .active{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+  .switchline{font-size:12px;display:flex;align-items:center;gap:7px;white-space:nowrap;color:var(--muted)}
+  .switchline input{width:auto}
 
-  /* App 卡片网格 */
-  .app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
-  .app-card{background:var(--card);border:1px solid var(--line);border-radius:10px;
-            padding:16px;transition:border-color .15s}
-  .app-card:hover{border-color:var(--primary)}
-  .app-card-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
-  .app-card-icon{width:48px;height:48px;border-radius:10px;background:var(--bg);
-                 object-fit:cover;flex-shrink:0}
-  .app-card-icon.missing{display:flex;align-items:center;justify-content:center;
-      font-size:24px;background:var(--card);border:1px solid var(--line)}
-  .app-card-title{font-size:16px;font-weight:600;line-height:1.3}
-  .app-card-count{font-size:11px;color:var(--muted)}
-  .app-card-desc{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4}
-  .app-card-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;
-                   font-size:12px;color:var(--primary);border:none;background:none;padding:4px 0}
-  .app-card-toggle:hover{color:#79b8ff}
-  .app-card-toggle .arrow{display:inline-block;transition:transform .2s;font-size:10px}
-  .app-card-toggle .arrow.open{transform:rotate(90deg)}
-  .version-list{margin-top:8px;max-height:0;overflow:hidden;transition:max-height .3s ease}
-  .version-list.open{max-height:2000px}
-  .version-item{display:flex;align-items:center;gap:8px;padding:8px 0;
-                border-top:1px solid var(--line);font-size:12px}
-  .version-item .ver{color:var(--text);font-weight:500;min-width:60px}
-  .version-item .meta{color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .log-shell{padding:0}
+  .log-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .log-toolbar select{width:auto;min-width:124px;padding:7px 10px}
+  pre.log{
+    margin:0;padding:16px;max-height:470px;overflow:auto;background:#070b11;color:#d7e1ee;
+    font:12px/1.55 Menlo,Monaco,Consolas,monospace;white-space:pre-wrap;
+  }
+  [data-theme="light"] pre.log{background:#101827;color:#e8eef7}
+  .empty{
+    display:grid;place-items:center;text-align:center;min-height:170px;color:var(--muted);
+    border:1px dashed var(--line);border-radius:18px;background:color-mix(in srgb,var(--surface-2) 66%, transparent);
+  }
+  .empty strong{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
+  .skeleton-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:14px}
+  .skeleton{height:174px;border-radius:22px;background:linear-gradient(90deg,var(--surface),var(--surface-2),var(--surface));background-size:240% 100%;animation:shimmer 1.3s infinite}
+  .toast{
+    position:fixed;right:24px;top:24px;z-index:99;max-width:420px;padding:13px 15px;border-radius:16px;
+    background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);animation:toastIn .2s ease both;
+  }
+  .toast.ok{border-color:color-mix(in srgb,var(--ok) 55%, var(--line))}
+  .toast.err{border-color:color-mix(in srgb,var(--danger) 65%, var(--line));color:var(--danger)}
 
-  @media (max-width:768px){.sidebar{width:60px}.sidebar .nav-item span,.sidebar-logo .sub{display:none}.sidebar-logo h1{font-size:14px}.sidebar-bottom select{font-size:10px}}
+  @keyframes pulse{70%{box-shadow:0 0 0 10px transparent}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes toastIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes shimmer{to{background-position:-240% 0}}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
+  }
+  @media (max-width:1020px){
+    .app-shell{grid-template-columns:1fr}
+    .sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line-soft)}
+    .sidebar-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:visible}
+    .side-card{margin-top:0}
+    .hero-content{grid-template-columns:1fr}
+  }
+  @media (max-width:720px){
+    .main{padding:16px}
+    .topbar{align-items:flex-start;flex-direction:column}
+    .actions{width:100%;justify-content:stretch}
+    .actions .btn{flex:1}
+    .sidebar{padding:14px}
+    .brand-card{padding:14px}
+    .sidebar-nav{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .nav-copy small{display:none}
+    .hero-panel{border-radius:22px;padding:16px}
+    .metric-grid,.grid3,.addbar,.addbar.two{grid-template-columns:1fr}
+    .panel-head{flex-direction:column}
+    .version-item{grid-template-columns:1fr auto auto}
+    .version-item .meta{grid-column:1 / -1;grid-row:2}
+  }
 </style>
 </head>
 <body>
-<div class="app" x-data="ipaApp()" x-init="init()">
-
-  <!-- 左侧菜单栏 -->
+<div class="app-shell" x-data="ipaApp()" x-init="init()">
   <aside class="sidebar">
-    <div class="sidebar-logo">
-      <h1>📱 IPA Self-Host</h1>
-      <div class="sub" x-text="status.ipa_count ? status.ipa_count+' 个IPA' : '控制台'"></div>
-    </div>
-    <nav class="sidebar-nav">
-      <div class="nav-item" :class="{active:tab==='apps'}" @click="tab='apps'">
-        <span class="icon">📱</span><span>App 总览</span>
+    <section class="brand-card">
+      <div class="brand-top">
+        <div class="brand-mark">IPA</div>
+        <div>
+          <div class="brand-title">IPA Self-Host</div>
+          <div class="brand-sub">私人应用源控制台</div>
+        </div>
       </div>
-      <div class="nav-item" :class="{active:tab==='groups'}" @click="tab='groups'">
-        <span class="icon">📡</span><span>群组管理</span>
+      <div class="live-chip">
+        <span><i class="pulse-dot"></i>Repository Online</span>
+        <b x-text="(status.ipa_count || 0) + ' IPA'"></b>
       </div>
-      <div class="nav-item" :class="{active:tab==='whitelist'}" @click="tab='whitelist'">
-        <span class="icon">📦</span><span>关键词</span>
-      </div>
-      <div class="nav-item" :class="{active:tab==='bot'}" @click="tab='bot'">
-        <span class="icon">🤖</span><span>Bot 配置</span>
-      </div>
-      <div class="nav-item" :class="{active:tab==='account'}" @click="tab='account'">
-        <span class="icon">👤</span><span>账号</span>
-      </div>
-      <div class="nav-item" :class="{active:tab==='settings'}" @click="tab='settings'">
-        <span class="icon">⚙️</span><span>速率</span>
-      </div>
-      <div class="nav-item" :class="{active:tab==='proxy'}" @click="tab='proxy'">
-        <span class="icon">🌐</span><span>代理</span>
-      </div>
-      <div class="nav-item" :class="{active:tab==='logs'}" @click="tab='logs'">
-        <span class="icon">📜</span><span>日志</span>
-      </div>
+    </section>
+
+    <nav class="sidebar-nav" aria-label="主导航">
+      <button type="button" class="nav-item" :class="{active:tab==='apps'}" @click="setTab('apps')">
+        <span class="nav-icon">📱</span><span class="nav-copy"><b>App 总览</b><small>版本、下载与删除</small></span>
+      </button>
+      <button type="button" class="nav-item" :class="{active:tab==='groups'}" @click="setTab('groups')">
+        <span class="nav-icon">📡</span><span class="nav-copy"><b>群组管理</b><small>来源与优先级</small></span>
+      </button>
+      <button type="button" class="nav-item" :class="{active:tab==='whitelist'}" @click="setTab('whitelist')">
+        <span class="nav-icon">📦</span><span class="nav-copy"><b>关键词</b><small>下载白名单</small></span>
+      </button>
+      <button type="button" class="nav-item" :class="{active:tab==='bot'}" @click="setTab('bot')">
+        <span class="nav-icon">🤖</span><span class="nav-copy"><b>Bot 配置</b><small>通知与验证</small></span>
+      </button>
+      <button type="button" class="nav-item" :class="{active:tab==='account'}" @click="setTab('account')">
+        <span class="nav-icon">👤</span><span class="nav-copy"><b>账号</b><small>管理登录密码</small></span>
+      </button>
+      <button type="button" class="nav-item" :class="{active:tab==='settings'}" @click="setTab('settings')">
+        <span class="nav-icon">⚙️</span><span class="nav-copy"><b>速率</b><small>扫描下载节奏</small></span>
+      </button>
+      <button type="button" class="nav-item" :class="{active:tab==='proxy'}" @click="setTab('proxy')">
+        <span class="nav-icon">🌐</span><span class="nav-copy"><b>代理</b><small>Telegram 网络</small></span>
+      </button>
+      <button type="button" class="nav-item" :class="{active:tab==='logs'}" @click="setTab('logs')">
+        <span class="nav-icon">📜</span><span class="nav-copy"><b>日志</b><small>实时运行状态</small></span>
+      </button>
     </nav>
-    <div class="sidebar-bottom">
-      <select x-model="themeMode" @change="setTheme(themeMode)">
-        <option value="dark">🌙 夜间</option>
-        <option value="light">☀️ 日间</option>
-        <option value="auto">🌅 自动</option>
-      </select>
-      <button class="logout-btn" @click="logout()">退出登录</button>
-    </div>
+
+    <section class="side-card">
+      <div class="theme-title">界面主题</div>
+      <div class="theme-tabs">
+        <button type="button" :class="{active:themeMode==='dark'}" @click="setTheme('dark')">夜间</button>
+        <button type="button" :class="{active:themeMode==='light'}" @click="setTheme('light')">日间</button>
+        <button type="button" :class="{active:themeMode==='auto'}" @click="setTheme('auto')">自动</button>
+      </div>
+      <div class="theme-current" x-text="themeSummary()"></div>
+      <button type="button" class="logout-btn" @click="logout()">退出登录</button>
+    </section>
   </aside>
 
-  <!-- 主内容区 -->
   <main class="main">
-    <div class="main-head">
-      <h2 x-text="tabTitle()"></h2>
-      <div class="actions">
-        <button class="pri" @click="triggerScan()" :disabled="scanning">
-          <span x-text="scanning ? '⏳ 扫描中...' : '🔄 立即扫描'"></span>
-        </button>
-        <button @click="loadAll()">↻ 刷新</button>
+    <header class="topbar">
+      <div class="title-block">
+        <div class="eyebrow"><i class="pulse-dot"></i><span x-text="currentTheme === 'light' ? 'Light workspace' : 'Dark workspace'"></span></div>
+        <h1 x-text="tabTitle()"></h1>
+        <p x-text="tabSubtitle()"></p>
       </div>
-    </div>
+      <div class="actions">
+        <button type="button" class="btn" @click="loadAll()">↻ 刷新</button>
+        <button type="button" class="btn primary" @click="triggerScan()" :disabled="scanning">
+          <span class="scan-spin">↻</span>
+          <span x-text="scanning ? '扫描中...' : '立即扫描'"></span>
+        </button>
+      </div>
+    </header>
 
-    <!-- App 总览 -->
-    <div x-show="tab==='apps'">
-      <template x-if="!appGroups.length">
-        <div class="empty">还没有 IPA 文件，点击「立即扫描」从 TG 群组下载</div>
-      </template>
-      <div class="app-grid">
-        <template x-for="app in appGroups" :key="app.name">
-          <div class="app-card">
-            <div class="app-card-header">
-              <img class="app-card-icon" :class="{missing: !app.icon}"
-                   :src="app.icon ? '/static/icons/' + app.icon : ''"
-                   @error="$el.classList.add('missing');$el.src=''"
-                   x-show="app.icon">
-              <div x-show="!app.icon" class="app-card-icon missing" x-text="app.name.charAt(0)"></div>
-              <div>
-                <div class="app-card-title" x-text="app.name"></div>
-                <div class="app-card-count" x-text="app.versions.length + ' 个版本'"></div>
+    <section class="hero-panel">
+      <div class="hero-content">
+        <div class="hero-copy">
+          <div class="eyebrow">Private IPA Repository</div>
+          <h2>把 TG 来源、IPA 仓库、Bot 通知和运行日志收进一个干净的控制台。</h2>
+          <p>界面会自动适配明暗主题，常用操作集中在首屏，列表与表单在桌面和移动端都保持可读、可点、可维护。</p>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><span>IPA 文件</span><strong x-text="status.ipa_count || ipaList.length || 0"></strong></div>
+          <div class="metric"><span>TG 群组</span><strong x-text="(cfg.groups || []).length"></strong></div>
+          <div class="metric"><span>白名单 App</span><strong x-text="(cfg.whitelist || []).length"></strong></div>
+          <div class="metric"><span>当前主题</span><strong x-text="currentTheme === 'light' ? '日间' : '夜间'"></strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" x-show="tab==='apps'" x-cloak x-transition.opacity.duration.180ms>
+      <div class="panel">
+        <div class="panel-head">
+          <div><h3>App 总览</h3><p>按应用聚合版本，展开后可以下载或删除单个 IPA。</p></div>
+          <button type="button" class="btn sm" @click="loadIpa()">刷新列表</button>
+        </div>
+        <div class="panel-body">
+          <div class="skeleton-grid" x-show="loading" x-cloak>
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+          </div>
+          <template x-if="!loading && !appGroups.length">
+            <div class="empty"><div><strong>还没有 IPA 文件</strong><span>点击「立即扫描」从 TG 群组下载并生成源数据。</span></div></div>
+          </template>
+          <div class="app-grid" x-show="!loading && appGroups.length" x-cloak>
+            <template x-for="app in appGroups" :key="app.name">
+              <article class="app-card">
+                <div class="app-card-header">
+                  <div class="app-avatar">
+                    <img :src="app.icon ? '/static/icons/' + app.icon : ''" x-show="app.icon"
+                         @error="$el.style.display='none'; app.icon=null">
+                    <span x-show="!app.icon" x-text="app.name.charAt(0)"></span>
+                  </div>
+                  <div class="app-title">
+                    <h3 x-text="app.name"></h3>
+                    <span x-text="app.versions.length + ' 个版本'"></span>
+                  </div>
+                </div>
+                <p class="app-desc" x-text="getAppDesc(app.name)"></p>
+                <div class="app-actions">
+                  <button type="button" class="toggle-link" @click="app.expanded = !app.expanded">
+                    <span class="arrow" :class="{open: app.expanded}">▶</span>
+                    <span x-text="app.expanded ? '收起版本' : '展开版本'"></span>
+                  </button>
+                  <span class="muted" x-text="'最新 ' + (app.versions[0]?.version || '-')"></span>
+                </div>
+                <div class="version-list" :class="{open: app.expanded}">
+                  <template x-for="v in app.versions" :key="v.filename">
+                    <div class="version-item">
+                      <span class="ver" x-text="'v' + v.version"></span>
+                      <span class="meta" x-text="v.size_mb + ' MB · ' + v.mtime_str"></span>
+                      <button type="button" class="btn sm icon" @click="downloadIpa(v.filename)" title="下载">⬇</button>
+                      <button type="button" class="btn danger sm" @click="delIpaSingle(v.filename)">删除</button>
+                    </div>
+                  </template>
+                </div>
+              </article>
+            </template>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view panel" x-show="tab==='groups'" x-cloak x-transition.opacity.duration.180ms>
+      <div class="panel-head">
+        <div><h3>TG 群组列表</h3><p>星标群组会作为同版本 IPA 的优先来源。</p></div>
+      </div>
+      <div class="panel-body">
+        <template x-if="!cfg.groups || !cfg.groups.length"><div class="empty"><div><strong>还没有群组</strong><span>添加 Telegram 群组链接后即可扫描。</span></div></div></template>
+        <div class="list">
+          <template x-for="g in (cfg.groups||[])" :key="g">
+            <div class="list-row">
+              <button type="button" class="btn sm icon" @click="togglePriority(g)"
+                      :title="cfg.priority_groups.includes(g)?'取消优先':'设为优先'"
+                      x-text="cfg.priority_groups.includes(g)?'⭐':'☆'"></button>
+              <div class="grow"><a :href="g" target="_blank" x-text="g"></a></div>
+              <button type="button" class="btn danger sm" @click="delGroup(g)">删除</button>
+            </div>
+          </template>
+        </div>
+        <div class="addbar">
+          <input x-model="newGroup" placeholder="https://t.me/xxx" @keydown.enter="addGroup()">
+          <button type="button" class="btn primary" @click="addGroup()">添加群组</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="view panel" x-show="tab==='whitelist'" x-cloak x-transition.opacity.duration.180ms>
+      <div class="panel-head">
+        <div><h3>关键词白名单</h3><p>只下载文件名包含关键词的 IPA，减少无关文件进入仓库。</p></div>
+      </div>
+      <div class="panel-body">
+        <template x-if="!cfg.whitelist || !cfg.whitelist.length"><div class="empty"><div><strong>还没有白名单</strong><span>添加 App 名称和关键词后扫描会更精准。</span></div></div></template>
+        <div class="list">
+          <template x-for="app in (cfg.whitelist||[])" :key="app.name">
+            <div class="list-row" style="display:block">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="grow"><b x-text="app.name"></b> <span class="muted" x-text="'（'+app.keywords.length+' 个关键词）'"></span></div>
+                <button type="button" class="btn danger sm" @click="delApp(app.name)">删除 App</button>
+              </div>
+              <div class="tag-cloud">
+                <template x-for="(k,i) in app.keywords" :key="k">
+                  <span class="tag"><span x-text="k"></span><button type="button" @click="delKeyword(app,i)" title="删除关键词">×</button></span>
+                </template>
+                <input class="inline-add" x-model="newKw[app.name]" :placeholder="'+ 加关键词'" @keydown.enter="addKeyword(app)">
               </div>
             </div>
-            <div class="app-card-desc" x-text="getAppDesc(app.name)"></div>
-            <button class="app-card-toggle" @click="app.expanded = !app.expanded">
-              <span class="arrow" :class="{open: app.expanded}">▶</span>
-              <span x-text="app.expanded ? '收起' : '展开版本（' + app.versions.length + '）'"></span>
-            </button>
-            <div class="version-list" :class="{open: app.expanded}">
-              <template x-for="v in app.versions" :key="v.filename">
-                <div class="version-item">
-                  <span class="ver" x-text="'v' + v.version"></span>
-                  <span class="meta" x-text="v.size_mb + ' MB · ' + v.mtime_str"></span>
-                  <button class="sm" @click="downloadIpa(v.filename)">⬇</button>
-                  <button class="danger sm" @click="delIpaSingle(v.filename)">删</button>
+          </template>
+        </div>
+        <div style="border-top:1px dashed var(--line);margin-top:16px;padding-top:16px">
+          <label class="lbl">新增 App</label>
+          <div class="addbar two">
+            <input x-model="newApp.name" placeholder="App 名称（如 YouTube）">
+            <input x-model="newApp.keywords" placeholder="关键词 1, 关键词 2, ...">
+            <button type="button" class="btn primary" @click="addApp()">添加</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view panel" x-show="tab==='bot'" x-cloak x-transition.opacity.duration.180ms>
+      <div class="panel-head">
+        <div><h3>Telegram Bot 配置</h3><p>用于自动通知、连接检查和后续扩展。</p></div>
+      </div>
+      <div class="panel-body">
+        <p class="hint">Bot 需先加入目标群组并授予读消息权限。Token 通过 <a href="https://t.me/BotFather" target="_blank">@BotFather</a> 获取。</p>
+        <div class="form-grid">
+          <div class="field"><label>Bot Token</label><input x-model="botCfg.token" placeholder="123456:ABC-DEF1234gh..." type="text"></div>
+          <div class="list-row">
+            <div style="width:110px">状态</div>
+            <div>
+              <template x-if="botCfg.has_token && botCfg.bot_username"><span><span class="status-dot on"></span>已连接 @<span x-text="botCfg.bot_username"></span></span></template>
+              <template x-if="!botCfg.has_token || !botCfg.bot_username"><span><span class="status-dot"></span>未配置</span></template>
+            </div>
+          </div>
+          <div class="list-row" x-show="botCfg.has_token" x-cloak>
+            <div style="width:110px">当前 Token</div><span class="code" x-text="botCfg.token_preview || '***'"></span>
+          </div>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn primary" @click="saveBot()" :disabled="botSaving" x-text="botSaving ? '验证中...' : '保存并验证'"></button>
+          <button type="button" class="btn" @click="testBot()" :disabled="botTesting || !botCfg.has_token" x-show="botCfg.has_token" x-cloak x-text="botTesting ? '测试中...' : '测试连接'"></button>
+        </div>
+        <div x-show="botTestResult" x-cloak class="result-box">
+          <template x-if="botTestResult && botTestResult.ok">
+            <div style="color:var(--ok)">Bot 连接正常：@<span x-text="botTestResult.bot?.username"></span> (<span x-text="botTestResult.bot?.name"></span>)</div>
+          </template>
+          <template x-if="botTestResult && !botTestResult.ok">
+            <div style="color:var(--danger)" x-text="botTestResult.error"></div>
+          </template>
+        </div>
+      </div>
+    </section>
+
+    <section class="view panel" x-show="tab==='account'" x-cloak x-transition.opacity.duration.180ms>
+      <div class="panel-head">
+        <div><h3>修改登录密码</h3><p>用户名固定为 admin，密码持久化保存在配置卷。</p></div>
+      </div>
+      <div class="panel-body">
+        <p class="hint">密码保存在 <span class="code">/config/webui_pass.json</span>。修改成功后需要重新登录。</p>
+        <div class="form-grid">
+          <div class="field"><label>当前密码</label><input type="password" x-model="pw.old"></div>
+          <div class="field"><label>新密码</label><input type="password" x-model="pw.new" maxlength="64"></div>
+          <div class="field"><label>确认新密码</label><input type="password" x-model="pw.confirm" maxlength="64"></div>
+        </div>
+        <div class="button-row"><button type="button" class="btn primary" @click="changePassword()">修改密码</button></div>
+      </div>
+    </section>
+
+    <section class="view panel" x-show="tab==='settings'" x-cloak x-transition.opacity.duration.180ms>
+      <div class="panel-head">
+        <div><h3>下载速率限制</h3><p>控制 TG 扫描下载频率，减少风控和网络波动影响。</p></div>
+      </div>
+      <div class="panel-body">
+        <div class="grid3">
+          <div class="field"><label>每日最多下载</label><input type="number" x-model.number="cfg.rate_limit.max_per_day" min="1"></div>
+          <div class="field"><label>最小间隔（秒）</label><input type="number" x-model.number="cfg.rate_limit.min_interval_sec" min="1"></div>
+          <div class="field"><label>最大间隔（秒）</label><input type="number" x-model.number="cfg.rate_limit.max_interval_sec" min="1"></div>
+        </div>
+        <div class="button-row"><button type="button" class="btn primary" @click="saveRate()">保存速率</button></div>
+      </div>
+    </section>
+
+    <section class="view panel" x-show="tab==='proxy'" x-cloak x-transition.opacity.duration.180ms>
+      <div class="panel-head">
+        <div><h3>网络代理设置</h3><p>用于访问 Telegram API 和下载 IPA。Bot 转发立即生效，定时扫描需重启容器。</p></div>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label>代理地址</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input :value="proxyCfg.url" @input="proxyCfg.url=$event.target.value" placeholder="socks5://10.0.0.100:7893">
+            <label class="switchline"><input type="checkbox" x-model="proxyCfg.enabled"> 启用</label>
+          </div>
+        </div>
+        <div style="margin-top:14px">
+          <label class="lbl">快捷预设</label>
+          <div class="preset-grid">
+            <template x-for="p in proxyPresets" :key="p.url">
+              <button type="button" class="btn sm" :class="{active: proxyCfg.url===p.url}" @click="proxyCfg.url=p.url; proxyCfg.source='preset'" x-text="p.name" :title="p.desc"></button>
+            </template>
+          </div>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn primary" @click="saveProxy()" :disabled="proxySaving" x-text="proxySaving ? '保存中...' : '保存代理'"></button>
+          <button type="button" class="btn" @click="testProxy()" :disabled="proxyTesting" x-text="proxyTesting ? '测试中...' : '测试连通性'"></button>
+        </div>
+        <div x-show="proxyTestResult" x-cloak class="result-box">
+          <template x-if="proxyTestResult">
+            <div>
+              <div style="margin-bottom:8px"><b x-text="proxyTestResult.ok ? '代理可用' : '代理不可用'"></b></div>
+              <template x-if="proxyTestResult.tests">
+                <div class="muted">
+                  <div>Telegram(代理): <span :style="{color:proxyTestResult.tests.telegram_via_proxy?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.telegram_via_proxy?.ok?'✓ '+proxyTestResult.tests.telegram_via_proxy?.latency_ms+'ms':'✗'"></span></div>
+                  <div>Google(代理): <span :style="{color:proxyTestResult.tests.google_via_proxy?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.google_via_proxy?.ok?'✓ '+proxyTestResult.tests.google_via_proxy?.latency_ms+'ms':'✗'"></span></div>
+                  <div>Telegram(直连): <span :style="{color:proxyTestResult.tests.telegram_direct?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.telegram_direct?.ok?'✓ '+proxyTestResult.tests.telegram_direct?.latency_ms+'ms':'✗ (需代理)'"></span></div>
                 </div>
               </template>
             </div>
-          </div>
-        </template>
-      </div>
-    </div>
-
-    <!-- 群组 -->
-    <div x-show="tab==='groups'" class="card">
-      <h3>TG 群组列表（⭐ = 优先群，同版本优先采用）</h3>
-      <template x-if="!cfg.groups || !cfg.groups.length"><div class="empty">还没有群组</div></template>
-      <template x-for="g in (cfg.groups||[])" :key="g">
-        <div class="row">
-          <button class="sm" @click="togglePriority(g)"
-                  :title="cfg.priority_groups.includes(g)?'取消优先':'设为优先'"
-                  x-text="cfg.priority_groups.includes(g)?'⭐':'☆'"></button>
-          <div class="grow"><a :href="g" target="_blank" style="color:#79b8ff;text-decoration:none" x-text="g"></a></div>
-          <button class="danger sm" @click="delGroup(g)">删除</button>
-        </div>
-      </template>
-      <div class="addbar">
-        <input x-model="newGroup" placeholder="https://t.me/xxx" @keydown.enter="addGroup()">
-        <button class="pri" @click="addGroup()">+ 添加群组</button>
-      </div>
-    </div>
-
-    <!-- 关键词 -->
-    <div x-show="tab==='whitelist'" class="card">
-      <h3>IPA 关键词白名单（只下载文件名含关键词的 IPA）</h3>
-      <template x-if="!cfg.whitelist || !cfg.whitelist.length"><div class="empty">还没有白名单</div></template>
-      <template x-for="app in (cfg.whitelist||[])" :key="app.name">
-        <div class="row" style="display:block">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div class="grow"><b x-text="app.name"></b>
-              <span style="color:var(--muted);font-size:12px" x-text="'（'+app.keywords.length+' 个关键词）'"></span>
-            </div>
-            <button class="danger sm" @click="delApp(app.name)">删 App</button>
-          </div>
-          <div class="kws">
-            <template x-for="(k,i) in app.keywords" :key="k">
-              <div class="kw"><span x-text="k"></span><button @click="delKeyword(app,i)" title="删关键词">×</button></div>
-            </template>
-            <div class="kw" style="background:transparent">
-              <input style="background:transparent;border:none;padding:0;width:120px"
-                     :placeholder="'+ 加关键词'" x-model="newKw[app.name]"
-                     @keydown.enter="addKeyword(app)">
-            </div>
-          </div>
-        </div>
-      </template>
-      <div style="border-top:1px dashed var(--line);margin-top:14px;padding-top:14px">
-        <label class="lbl">新增 App</label>
-        <div class="addbar">
-          <input x-model="newApp.name" placeholder="App 名称（如 YouTube）" style="flex:1">
-          <input x-model="newApp.keywords" placeholder="关键词 1, 关键词 2, ..." style="flex:2">
-          <button class="pri" @click="addApp()">+ 添加</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 🤖 Bot 配置 -->
-    <div x-show="tab==='bot'" class="card">
-      <h3>Telegram Bot 配置</h3>
-      <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
-        配置 Bot Token 用于自动通知。Bot 需先被加入目标群组并授予读消息权限。
-        <br>Token 通过 <a href="https://t.me/BotFather" target="_blank" style="color:var(--primary)">@BotFather</a> 获取。
-      </div>
-      <div class="row">
-        <div style="width:100px">Bot Token</div>
-        <input style="flex:1" x-model="botCfg.token" placeholder="123456:ABC-DEF1234gh..." type="text">
-      </div>
-      <div class="row">
-        <div style="width:100px">状态</div>
-        <div>
-          <template x-if="botCfg.has_token && botCfg.bot_username">
-            <span><span class="status-dot on"></span>已连接 @<span x-text="botCfg.bot_username"></span></span>
-          </template>
-          <template x-if="!botCfg.has_token || !botCfg.bot_username">
-            <span><span class="status-dot off"></span>未配置</span>
           </template>
         </div>
       </div>
-      <div class="row" x-show="botCfg.has_token">
-        <div style="width:100px">当前 Token</div>
-        <span class="code" x-text="botCfg.token_preview || '***'"></span>
-      </div>
-      <div style="margin-top:14px;display:flex;gap:8px">
-        <button class="pri" @click="saveBot()" :disabled="botSaving">
-          <span x-text="botSaving ? '⏳ 验证中...' : '💾 保存并验证'"></span>
-        </button>
-        <button @click="testBot()" :disabled="botTesting || !botCfg.has_token" x-show="botCfg.has_token">
-          <span x-text="botTesting ? '⏳ 测试中...' : '🔍 测试连接'"></span>
-        </button>
-      </div>
-      <div x-show="botTestResult" style="margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:6px;font-size:13px">
-        <template x-if="botTestResult.ok">
-          <div style="color:var(--ok)">✅ Bot 连接正常: @<span x-text="botTestResult.bot?.username"></span> (<span x-text="botTestResult.bot?.name"></span>)</div>
-        </template>
-        <template x-if="!botTestResult.ok">
-          <div style="color:var(--danger)">❌ <span x-text="botTestResult.error"></span></div>
-        </template>
-      </div>
-    </div>
+    </section>
 
-    <!-- 账号 -->
-    <div x-show="tab==='account'" class="card">
-      <h3>修改登录密码</h3>
-      <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
-        用户名固定为 <code>admin</code>。密码保存在 <code>/config/webui_pass.json</code>，重启不丢失。
-        <br><b style="color:var(--warn)">改完后需重新登录。</b>
-      </div>
-      <div class="row"><div style="width:120px">当前密码</div><input style="flex:1" type="password" x-model="pw.old"></div>
-      <div class="row"><div style="width:120px">新密码</div><input style="flex:1" type="password" x-model="pw.new" maxlength="64"></div>
-      <div class="row"><div style="width:120px">确认</div><input style="flex:1" type="password" x-model="pw.confirm" maxlength="64"></div>
-      <div style="margin-top:14px"><button class="pri" @click="changePassword()">🔑 修改密码</button></div>
-    </div>
-
-    <!-- 速率 -->
-    <div x-show="tab==='settings'" class="card">
-      <h3>下载速率限制</h3>
-      <div class="grid3">
-        <div><label class="lbl">每日最多下载</label><input type="number" x-model.number="cfg.rate_limit.max_per_day" min="1"></div>
-        <div><label class="lbl">最小间隔（秒）</label><input type="number" x-model.number="cfg.rate_limit.min_interval_sec" min="1"></div>
-        <div><label class="lbl">最大间隔（秒）</label><input type="number" x-model.number="cfg.rate_limit.max_interval_sec" min="1"></div>
-      </div>
-      <div style="margin-top:14px"><button class="pri" @click="saveRate()">💾 保存</button></div>
-    </div>
-
-    <!-- 代理 -->
-    <div x-show="tab==='proxy'" class="card">
-      <h3>网络代理设置</h3>
-      <div style="color:var(--muted);font-size:12px;margin-bottom:12px">代理用于访问 Telegram API 和下载 IPA。转发 Bot 立即生效；定时扫描需重启容器。</div>
-      <div class="row" style="display:block">
-        <label class="lbl">代理地址</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input :value="proxyCfg.url" @input="proxyCfg.url=$event.target.value" placeholder="socks5://10.0.0.100:7893" style="flex:1">
-          <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap">
-            <input type="checkbox" x-model="proxyCfg.enabled" style="width:auto"> 启用
-          </label>
-        </div>
-      </div>
-      <div style="margin-top:12px">
-        <label class="lbl">快捷预设</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
-          <template x-for="p in proxyPresets" :key="p.url">
-            <button class="sm" :style="proxyCfg.url===p.url ? 'border-color:var(--primary);color:var(--primary)' : ''"
-                    @click="proxyCfg.url=p.url; proxyCfg.source='preset'" x-text="p.name" :title="p.desc"></button>
-          </template>
-        </div>
-      </div>
-      <div style="margin-top:14px;display:flex;gap:8px">
-        <button class="pri" @click="saveProxy()" :disabled="proxySaving">💾 保存</button>
-        <button @click="testProxy()" :disabled="proxyTesting"><span x-text="proxyTesting?'⏳ 测试中...':'🔍 测试连通性'"></span></button>
-      </div>
-      <div x-show="proxyTestResult" style="margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:6px;font-size:13px">
-        <template x-if="proxyTestResult">
-          <div><div style="margin-bottom:6px"><span x-text="proxyTestResult.ok ? '✅ 代理可用' : '❌ 代理不可用'"></span></div>
-          <template x-if="proxyTestResult.tests">
-            <div style="font-size:12px;color:var(--muted)">
-              <div>Telegram(代理): <span :style="{color:proxyTestResult.tests.telegram_via_proxy?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.telegram_via_proxy?.ok?'✓ '+proxyTestResult.tests.telegram_via_proxy?.latency_ms+'ms':'✗'"></span></div>
-              <div>Google(代理): <span :style="{color:proxyTestResult.tests.google_via_proxy?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.google_via_proxy?.ok?'✓ '+proxyTestResult.tests.google_via_proxy?.latency_ms+'ms':'✗'"></span></div>
-              <div>Telegram(直连): <span :style="{color:proxyTestResult.tests.telegram_direct?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.telegram_direct?.ok?'✓ '+proxyTestResult.tests.telegram_direct?.latency_ms+'ms':'✗ (需代理)'"></span></div>
-            </div>
-          </template></div>
-        </template>
-      </div>
-    </div>
-
-    <!-- 日志 -->
-    <div x-show="tab==='logs'" class="card">
-      <h3 style="display:flex;justify-content:space-between;align-items:center">
-        <span>实时日志</span>
-        <span>
-          <select x-model="logName" @change="loadLog()" style="width:auto;padding:3px 8px;font-size:12px">
+    <section class="view panel log-shell" x-show="tab==='logs'" x-cloak x-transition.opacity.duration.180ms>
+      <div class="panel-head">
+        <div><h3>实时日志</h3><p>快速查看扫描、仓库生成和 Nginx 错误。</p></div>
+        <div class="log-toolbar">
+          <select x-model="logName" @change="loadLog()">
             <option value="tg-cron">TG 扫描</option>
             <option value="scanner">仓库扫描</option>
             <option value="nginx-error">Nginx 错误</option>
           </select>
-          <button class="sm" @click="loadLog()">↻</button>
-          <label style="font-size:12px;color:var(--muted)"><input type="checkbox" x-model="autoRefresh" style="width:auto"> 自动刷新</label>
-        </span>
-      </h3>
+          <button type="button" class="btn sm" @click="loadLog()">刷新</button>
+          <label class="switchline"><input type="checkbox" x-model="autoRefresh"> 自动刷新</label>
+        </div>
+      </div>
       <pre class="log" x-text="logContent || '(空)'"></pre>
-    </div>
+    </section>
   </main>
 
-  <!-- Toast -->
-  <div x-show="toast.msg" x-transition class="toast" :class="toast.type" @click="toast.msg=''" x-text="toast.msg"></div>
+  <div x-show="toast.msg" x-cloak x-transition class="toast" :class="toast.type" @click="toast.msg=''" x-text="toast.msg"></div>
 </div>
 
 <script>
@@ -425,32 +648,43 @@ const APP_DESC = {
 };
 
 const TAB_TITLES = {
-  apps:'📱 App 总览', groups:'📡 群组管理', whitelist:'📦 关键词白名单',
-  bot:'🤖 Telegram Bot 配置', account:'👤 修改密码', settings:'⚙️ 速率限制',
-  proxy:'🌐 网络代理', logs:'📜 实时日志'
+  apps:'App 总览', groups:'群组管理', whitelist:'关键词白名单',
+  bot:'Telegram Bot', account:'账号安全', settings:'速率限制',
+  proxy:'网络代理', logs:'实时日志'
 };
 
-// ====== 日出日落计算 (auto theme) ======
+const TAB_SUBTITLES = {
+  apps:'查看所有已收录应用，管理不同版本的 IPA 文件。',
+  groups:'管理 Telegram 群组来源，并设置优先群策略。',
+  whitelist:'用 App 名称和关键词过滤下载内容，减少噪音。',
+  bot:'配置 Bot Token，验证连接状态与通知能力。',
+  account:'更新 WebUI 登录密码，保护控制台入口。',
+  settings:'调整每日下载数量和下载间隔。',
+  proxy:'配置代理并测试 Telegram、Google 的连通性。',
+  logs:'观察扫描、仓库生成和反向代理的实时输出。'
+};
+
 function calcSunriseSunset(lat, lng) {
   const now = new Date();
   const start = new Date(now.getFullYear(), 0, 0);
-  const diff = now - start;
-  const dayOfYear = Math.floor(diff / 86400000);
-  
+  const dayOfYear = Math.floor((now - start) / 86400000);
   const zenith = 90.833;
   const D2R = Math.PI / 180;
   const R2D = 180 / Math.PI;
-  
   const lngHour = lng / 15;
-  const tRise = dayOfYear + ((6 - lngHour) / 24);
-  const tSet = dayOfYear + ((18 - lngHour) / 24);
-  
-  function calc(t) {
+
+  function normalizeHour(hour) {
+    return ((hour % 24) + 24) % 24;
+  }
+
+  function calc(isRise) {
+    const t = dayOfYear + (((isRise ? 6 : 18) - lngHour) / 24);
     const M = (0.9856 * t) - 3.289;
     const L = M + (1.916 * Math.sin(M * D2R)) + (0.020 * Math.sin(2 * M * D2R)) + 282.634;
     let Lnorm = L % 360; if (Lnorm < 0) Lnorm += 360;
     const RA = R2D * Math.atan(0.91764 * Math.tan(Lnorm * D2R));
     let RAnorm = RA % 360;
+    if (RAnorm < 0) RAnorm += 360;
     const Lquad = Math.floor(Lnorm / 90) * 90;
     const RAquad = Math.floor(RAnorm / 90) * 90;
     RAnorm += (Lquad - RAquad);
@@ -458,23 +692,36 @@ function calcSunriseSunset(lat, lng) {
     const sinDec = 0.39782 * Math.sin(Lnorm * D2R);
     const cosDec = Math.cos(Math.asin(sinDec));
     const cosH = (Math.cos(zenith * D2R) - (sinDec * Math.sin(lat * D2R))) / (cosDec * Math.cos(lat * D2R));
-    if (cosH > 1) return -1; // no sunrise
-    if (cosH < -1) return -2; // no sunset
-    const H = R2D * Math.acos(cosH) / 15;
-    return H;
+    if (cosH > 1) return -1;
+    if (cosH < -1) return -2;
+    let H = R2D * Math.acos(cosH);
+    H = (isRise ? 360 - H : H) / 15;
+    const T = H + RAnorm - (0.06571 * t) - 6.622;
+    const utcHour = normalizeHour(T - lngHour);
+    const localHour = normalizeHour(utcHour - (now.getTimezoneOffset() / 60));
+    return Math.round(localHour * 60) % 1440;
   }
-  
-  const hRise = calc(tRise);
-  const hSet = calc(tSet);
-  if (hRise < 0 || hSet < 0) return null;
-  
-  const riseHour = Math.floor(hRise); const riseMin = Math.round((hRise - riseHour) * 60);
-  const setHour = Math.floor(hSet); const setMin = Math.round((hSet - setHour) * 60);
-  
-  return {
-    sunrise: riseHour * 60 + riseMin,
-    sunset: setHour * 60 + setMin
-  };
+
+  const sunrise = calc(true);
+  const sunset = calc(false);
+  if (sunrise < 0 || sunset < 0) return null;
+  return { sunrise, sunset };
+}
+
+function normalizeThemeMode(mode) {
+  return ['dark', 'light', 'auto'].includes(mode) ? mode : 'dark';
+}
+
+function resolveTheme(mode, sunriseMin = null, sunsetMin = null) {
+  const themeMode = normalizeThemeMode(mode);
+  if (themeMode !== 'auto') return themeMode;
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  if (sunriseMin !== null && sunsetMin !== null && sunriseMin !== sunsetMin) {
+    if (sunriseMin < sunsetMin) return (mins >= sunriseMin && mins < sunsetMin) ? 'light' : 'dark';
+    return (mins >= sunriseMin || mins < sunsetMin) ? 'light' : 'dark';
+  }
+  return (mins >= 360 && mins < 1080) ? 'light' : 'dark';
 }
 
 function ipaApp() {
@@ -483,72 +730,72 @@ function ipaApp() {
     cfg: { groups:[], priority_groups:[], whitelist:[], rate_limit:{} },
     status: {}, pw: { old:'', new:'', confirm:'' },
     ipaList: [], appGroups: [], newGroup: '', newApp: { name:'', keywords:'' }, newKw: {},
-    scanning: false, logName: 'tg-cron', logContent: '', autoRefresh: false,
+    scanning: false, loading: true, logName: 'tg-cron', logContent: '', autoRefresh: false,
     toast: { msg:'', type:'ok' }, _logTimer: null,
-
-    // Theme
-    themeMode: 'dark',
-    currentTheme: 'dark',
-    sunriseMin: null, sunsetMin: null,
-    _themeInterval: null,
-
-    // Bot
+    themeMode: 'dark', currentTheme: 'dark', sunriseMin: null, sunsetMin: null, _themeInterval: null,
     botCfg: { token:'', enabled:true, token_preview:'', has_token:false, bot_username:'', chat_id:'' },
     botSaving: false, botTesting: false, botTestResult: null,
-
-    // Proxy
     proxyCfg: { url:'', enabled:true, source:'', env_tg_proxy:'', env_forward_proxy:'' },
     proxyPresets: [], proxySaving:false, proxyTesting:false, proxyTestResult:null,
 
     async init() {
-      // Theme
-      this.themeMode = localStorage.getItem('ipa-theme-mode') || 'dark';
-      await this.applyTheme();
-      // Auto theme: try geolocation for sunrise/sunset
-      if (this.themeMode === 'auto') {
-        try {
-          navigator.geolocation.getCurrentPosition(pos => {
-            const s = calcSunriseSunset(pos.coords.latitude, pos.coords.longitude);
-            if (s) { this.sunriseMin = s.sunrise; this.sunsetMin = s.sunset; this.applyTheme(); }
-          }, () => {}, { timeout: 5000 });
-        } catch(e) {}
-      }
+      this.tab = localStorage.getItem('ipa-active-tab') || 'apps';
+      this.themeMode = normalizeThemeMode(localStorage.getItem('ipa-theme-mode') || 'dark');
+      this.applyTheme();
+      if (this.themeMode === 'auto') this.refreshSunTimes();
       this._themeInterval = setInterval(() => {
         if (this.themeMode === 'auto') this.applyTheme();
       }, 60000);
 
-      await this.loadAll();
-      await this.loadProxy();
-      await this.loadBot();
+      try {
+        await this.loadAll();
+      } finally {
+        this.loading = false;
+      }
+      await Promise.allSettled([this.loadProxy(), this.loadBot()]);
       setInterval(() => {
         if (this.tab === 'logs' && this.autoRefresh) this.loadLog();
         if (this.tab === 'apps') this.loadStatus();
       }, 3000);
     },
 
+    setTab(next) {
+      this.tab = next;
+      localStorage.setItem('ipa-active-tab', next);
+      if (next === 'logs' && !this.logContent) this.loadLog();
+    },
     tabTitle() { return TAB_TITLES[this.tab] || ''; },
+    tabSubtitle() { return TAB_SUBTITLES[this.tab] || ''; },
     getAppDesc(name) { return APP_DESC[name] || 'iOS 应用安装包。'; },
+    themeSummary() {
+      if (this.themeMode === 'auto') return '自动 · 当前' + (this.currentTheme === 'light' ? '日间' : '夜间');
+      return this.themeMode === 'light' ? '固定日间主题' : '固定夜间主题';
+    },
 
     applyTheme() {
-      if (this.themeMode === 'auto') {
-        if (this.sunriseMin !== null && this.sunsetMin !== null) {
-          const now = new Date();
-          const mins = now.getHours() * 60 + now.getMinutes();
-          this.currentTheme = (mins >= this.sunriseMin && mins < this.sunsetMin) ? 'light' : 'dark';
-        } else {
-          // 无精确经纬度时用北京时间粗略估计（6:00日出, 18:00日落）
-          const now = new Date();
-          const mins = now.getHours() * 60 + now.getMinutes();
-          this.currentTheme = (mins >= 360 && mins < 1080) ? 'light' : 'dark';
-        }
-      } else {
-        this.currentTheme = this.themeMode;
-      }
-      // 挂到 <html> 上，确保 body/sidebar 等所有元素都能继承 CSS 变量
+      this.themeMode = normalizeThemeMode(this.themeMode);
+      this.currentTheme = resolveTheme(this.themeMode, this.sunriseMin, this.sunsetMin);
       document.documentElement.setAttribute('data-theme', this.currentTheme);
       localStorage.setItem('ipa-theme-mode', this.themeMode);
     },
-    setTheme(mode) { this.themeMode = mode; this.applyTheme(); if (mode === 'auto' && !this.sunriseMin) { try { navigator.geolocation.getCurrentPosition(pos => { const s = calcSunriseSunset(pos.coords.latitude, pos.coords.longitude); if (s) { this.sunriseMin = s.sunrise; this.sunsetMin = s.sunset; this.applyTheme(); } }, () => {}, {timeout:5000}); } catch(e) {} } },
+    refreshSunTimes() {
+      try {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(pos => {
+          const s = calcSunriseSunset(pos.coords.latitude, pos.coords.longitude);
+          if (s) {
+            this.sunriseMin = s.sunrise;
+            this.sunsetMin = s.sunset;
+            this.applyTheme();
+          }
+        }, () => {}, { timeout: 5000 });
+      } catch(e) {}
+    },
+    setTheme(mode) {
+      this.themeMode = normalizeThemeMode(mode);
+      this.applyTheme();
+      if (this.themeMode === 'auto' && this.sunriseMin === null) this.refreshSunTimes();
+    },
 
     groupApps() {
       const map = {};
@@ -564,7 +811,6 @@ function ipaApp() {
       this.appGroups = arr;
     },
 
-    // ====== API helpers ======
     async api(method, url, body) {
       try {
         const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined });
@@ -577,9 +823,17 @@ function ipaApp() {
     showToast(msg, type='ok') { this.toast = { msg, type }; setTimeout(() => this.toast.msg = '', 3000); },
 
     async loadAll() { await Promise.all([this.loadConfig(), this.loadStatus(), this.loadIpa()]); },
-    async loadConfig() { const c = await this.api('GET','/api/config'); c.rate_limit = c.rate_limit || {max_per_day:30,min_interval_sec:30,max_interval_sec:120}; this.cfg = c; },
+    async loadConfig() {
+      const c = await this.api('GET','/api/config');
+      this.cfg = {
+        groups: c.groups || [],
+        priority_groups: c.priority_groups || [],
+        whitelist: c.whitelist || [],
+        rate_limit: c.rate_limit || {max_per_day:30,min_interval_sec:30,max_interval_sec:120}
+      };
+    },
     async loadStatus() { this.status = await this.api('GET','/api/status'); },
-    async loadIpa() { const r = await this.api('GET','/api/ipa'); this.ipaList = r.files; this.groupApps(); },
+    async loadIpa() { const r = await this.api('GET','/api/ipa'); this.ipaList = r.files || []; this.groupApps(); },
     async loadLog() {
       const r = await fetch('/api/logs/'+this.logName+'?lines=300');
       if (r.status===401) { window.location.href='/login'; return; }
@@ -587,12 +841,10 @@ function ipaApp() {
       this.$nextTick(()=>{const pre=document.querySelector('pre.log'); if(pre) pre.scrollTop=pre.scrollHeight;});
     },
 
-    // ====== 群组 ======
-    async addGroup() { if (!this.newGroup.trim()) return; await this.api('POST','/api/groups',{url:this.newGroup.trim()}); this.newGroup=''; await this.loadConfig(); this.showToast('已添加'); },
+    async addGroup() { if (!this.newGroup.trim()) return; await this.api('POST','/api/groups',{url:this.newGroup.trim()}); this.newGroup=''; await this.loadConfig(); this.showToast('已添加群组'); },
     async delGroup(url) { if (!confirm('删除 : '+url+' ？')) return; await this.api('DELETE','/api/groups',{url}); await this.loadConfig(); this.showToast('已删除'); },
     async togglePriority(url) { await this.api('POST','/api/groups/priority',{url}); await this.loadConfig(); },
 
-    // ====== 白名单 ======
     async addApp() {
       const name=this.newApp.name.trim(), kws=this.newApp.keywords.split(',').map(s=>s.trim()).filter(Boolean);
       if (!name||!kws.length){this.showToast('App 名称+至少一个关键词','err');return;}
@@ -607,22 +859,18 @@ function ipaApp() {
     },
     async delKeyword(app, idx) {
       const next=app.keywords.filter((_,i)=>i!==idx);
-      if(!next.length){if(!confirm('最后关键词，删除后App也会移除。继续？'))return; await this.api('DELETE','/api/whitelist',{name:app.name});}
+      if(!next.length){if(!confirm('最后关键词，删除后 App 也会移除。继续？'))return; await this.api('DELETE','/api/whitelist',{name:app.name});}
       else{await this.api('PUT','/api/whitelist',{name:app.name,keywords:next});}
       await this.loadConfig();
     },
 
-    // ====== IPA 文件 ======
     async delIpaSingle(filename) {
       if(!confirm('确认删除 "'+filename+'"？'))return;
       await this.api('DELETE','/api/ipa',{filenames:[filename]}); await this.loadIpa(); await this.loadStatus(); this.showToast('已删除');
     },
     downloadIpa(filename) { window.open('/_ipa_proxy/'+encodeURIComponent(filename),'_blank'); },
 
-    // ====== 速率 ======
-    async saveRate() { await this.api('PUT','/api/rate_limit',this.cfg.rate_limit); this.showToast('已保存'); },
-
-    // ====== 密码 ======
+    async saveRate() { await this.api('PUT','/api/rate_limit',this.cfg.rate_limit); this.showToast('速率已保存'); },
     async changePassword() {
       if(!this.pw.old||!this.pw.new||!this.pw.confirm){this.showToast('请填完三个字段','err');return;}
       if(this.pw.new!==this.pw.confirm){this.showToast('两次密码不一致','err');return;}
@@ -631,7 +879,6 @@ function ipaApp() {
     },
     async logout() { try{await fetch('/api/logout',{method:'POST'});}catch(e){} window.location.href='/login'; },
 
-    // ====== 🤖 Bot 配置 ======
     async loadBot() {
       try { const r = await this.api('GET','/api/bot'); this.botCfg = { token:'', enabled:r.enabled!==false, token_preview:r.token_preview||'', has_token:r.has_token, bot_username:r.bot_username||'', chat_id:r.chat_id||'' }; } catch(e) {}
     },
@@ -652,15 +899,13 @@ function ipaApp() {
       this.botTesting = false;
     },
 
-    // ====== 代理 ======
     async loadProxy() {
       try { const r = await this.api('GET','/api/proxy'); this.proxyCfg={url:r.url||'',enabled:r.enabled!==false,source:r.source||'',env_tg_proxy:r.env_tg_proxy||'',env_forward_proxy:r.env_forward_proxy||''}; this.proxyPresets=r.presets||[]; } catch(e) {}
     },
     async saveProxy() { this.proxySaving=true; try{const r=await this.api('PUT','/api/proxy',{url:this.proxyCfg.url,enabled:this.proxyCfg.enabled,source:this.proxyCfg.source||'custom'});this.showToast(r.msg||'已保存');}catch(e){} this.proxySaving=false; },
     async testProxy() { this.proxyTesting=true; this.proxyTestResult=null; try{this.proxyTestResult=await this.api('POST','/api/proxy/test',{url:this.proxyCfg.url});}catch(e){this.proxyTestResult={ok:false,error:e.message};} this.proxyTesting=false; },
 
-    // ====== 扫描 ======
-    async triggerScan() { this.scanning=true; try{await this.api('POST','/api/scan');this.showToast('扫描已触发，查看日志进度');this.tab='logs';this.autoRefresh=true;this.loadLog();}finally{setTimeout(()=>this.scanning=false,3000);} },
+    async triggerScan() { this.scanning=true; try{await this.api('POST','/api/scan');this.showToast('扫描已触发，查看日志进度');this.setTab('logs');this.autoRefresh=true;this.loadLog();}finally{setTimeout(()=>this.scanning=false,3000);} },
   };
 }
 </script>
