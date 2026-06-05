@@ -25,7 +25,8 @@ RUN pip install --no-cache-dir --break-system-packages \
     telethon==1.36.0 \
     cryptg==0.4.0 \
     PySocks==1.7.1 \
-    flask==3.0.3
+    flask==3.0.3 \
+    httpx==0.28.1
 
 # 拷贝镜像内文件
 COPY rootfs/ /

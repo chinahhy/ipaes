@@ -125,7 +125,7 @@
 </style>
 </head>
 <body>
-<div class="app" x-data="ipaApp()" x-init="init()" :data-theme="currentTheme">
+<div class="app" x-data="ipaApp()" x-init="init()">
 
   <!-- 左侧菜单栏 -->
   <aside class="sidebar">
@@ -282,7 +282,7 @@
       </div>
       <div class="row">
         <div style="width:100px">Bot Token</div>
-        <input style="flex:1" x-model="botCfg.token" placeholder="123456:ABC-DEF1234gh..." type="password">
+        <input style="flex:1" x-model="botCfg.token" placeholder="123456:ABC-DEF1234gh..." type="text">
       </div>
       <div class="row">
         <div style="width:100px">状态</div>
@@ -536,11 +536,16 @@ function ipaApp() {
           const mins = now.getHours() * 60 + now.getMinutes();
           this.currentTheme = (mins >= this.sunriseMin && mins < this.sunsetMin) ? 'light' : 'dark';
         } else {
-          this.currentTheme = 'dark'; // fallback if no geolocation
+          // 无精确经纬度时用北京时间粗略估计（6:00日出, 18:00日落）
+          const now = new Date();
+          const mins = now.getHours() * 60 + now.getMinutes();
+          this.currentTheme = (mins >= 360 && mins < 1080) ? 'light' : 'dark';
         }
       } else {
         this.currentTheme = this.themeMode;
       }
+      // 挂到 <html> 上，确保 body/sidebar 等所有元素都能继承 CSS 变量
+      document.documentElement.setAttribute('data-theme', this.currentTheme);
       localStorage.setItem('ipa-theme-mode', this.themeMode);
     },
     setTheme(mode) { this.themeMode = mode; this.applyTheme(); if (mode === 'auto' && !this.sunriseMin) { try { navigator.geolocation.getCurrentPosition(pos => { const s = calcSunriseSunset(pos.coords.latitude, pos.coords.longitude); if (s) { this.sunriseMin = s.sunrise; this.sunsetMin = s.sunset; this.applyTheme(); } }, () => {}, {timeout:5000}); } catch(e) {} } },
