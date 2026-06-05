@@ -7,3 +7,9 @@ The login page interaction is inspired by:
 - License: Apache License 2.0
 
 The implementation in `rootfs/app/webui_static/login.html` is adapted for IPA Self-Host.
+
+The WebUI bundles:
+
+- `alpinejs@3.13.5`
+- Source: https://github.com/alpinejs/alpine
+- License: MIT License
