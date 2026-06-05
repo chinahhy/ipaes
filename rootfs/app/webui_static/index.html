@@ -10,35 +10,52 @@
     --bg:#0f1419; --card:#1a2028; --line:#252d38;
     --text:#e6edf3; --muted:#7d8590;
     --primary:#388bfd; --danger:#f85149; --warn:#d29922; --ok:#3fb950;
+    --sidebar-bg:#0d1117; --sidebar-hover:#1a2028; --sidebar-active:#1a2332;
+  }
+  [data-theme="light"] {
+    --bg:#f6f8fa; --card:#fff; --line:#d0d7de;
+    --text:#1f2328; --muted:#656d76;
+    --primary:#0969da; --danger:#cf222e; --warn:#9a6700; --ok:#1a7f37;
+    --sidebar-bg:#f6f8fa; --sidebar-hover:#eaeef2; --sidebar-active:#ddf4ff;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
        font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
-  .wrap{max-width:1100px;margin:0 auto;padding:20px}
-  .head{display:flex;justify-content:space-between;align-items:center;
-        padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:20px}
-  .head h1{margin:0;font-size:20px;font-weight:600}
-  .head .stat{color:var(--muted);font-size:13px}
-  .head .stat b{color:var(--text);margin:0 4px}
-  .head .actions{display:flex;gap:8px}
-  .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--line)}
-  .tab{padding:10px 16px;cursor:pointer;color:var(--muted);
-       border-bottom:2px solid transparent;transition:all .15s}
-  .tab.on{color:var(--text);border-color:var(--primary)}
-  .tab:hover{color:var(--text)}
+
+  /* 主布局: 左侧栏 + 内容 */
+  .app{display:flex;min-height:100vh}
+  .sidebar{width:220px;background:var(--sidebar-bg);border-right:1px solid var(--line);
+           flex-shrink:0;display:flex;flex-direction:column;padding:0;z-index:10}
+  .sidebar-logo{padding:20px 16px 16px;border-bottom:1px solid var(--line)}
+  .sidebar-logo h1{font-size:16px;margin:0;font-weight:600}
+  .sidebar-logo .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .sidebar-nav{flex:1;padding:8px 0;overflow-y:auto}
+  .sidebar-nav .nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;
+      cursor:pointer;color:var(--muted);font-size:13px;transition:all .15s;border-left:3px solid transparent}
+  .nav-item:hover{background:var(--sidebar-hover);color:var(--text)}
+  .nav-item.active{color:var(--text);background:var(--sidebar-active);border-left-color:var(--primary);font-weight:500}
+  .nav-item .icon{font-size:16px;width:20px;text-align:center}
+  .sidebar-bottom{padding:12px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+  .sidebar-bottom select{font-size:12px;padding:4px 8px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:4px;width:100%}
+  .sidebar-bottom .logout-btn{font-size:12px;padding:6px;width:100%;text-align:center;background:none;border:1px solid var(--line);color:var(--muted);border-radius:4px;cursor:pointer}
+  .sidebar-bottom .logout-btn:hover{color:var(--danger);border-color:var(--danger)}
+
+  .main{flex:1;min-width:0;overflow-y:auto;padding:24px}
+  .main-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+  .main-head h2{margin:0;font-size:18px;font-weight:600}
+  .main-head .stat{color:var(--muted);font-size:13px}
+  .main-head .stat b{color:var(--text);margin:0 4px}
+  .main-head .actions{display:flex;gap:8px;align-items:center}
+
+  /* 通用 */
   .card{background:var(--card);border:1px solid var(--line);
         border-radius:8px;padding:16px;margin-bottom:14px}
-  .card h2{margin:0 0 12px;font-size:15px;font-weight:600;
-           display:flex;justify-content:space-between;align-items:center}
-  .row{display:flex;align-items:center;gap:10px;padding:8px 0;
-       border-bottom:1px solid var(--line)}
+  .card h3{margin:0 0 12px;font-size:15px;font-weight:600}
+  .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
   .row:last-child{border:none}
   .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .pill{background:#2a3340;color:var(--muted);padding:2px 8px;
-        border-radius:10px;font-size:11px;margin-right:4px;display:inline-block;margin-bottom:2px}
-  .pill.star{background:#3a2f00;color:var(--warn)}
   button,input,select,textarea{font:inherit;color:inherit;border:1px solid var(--line);
-       background:#0d1117;padding:6px 10px;border-radius:5px;outline:none}
+       background:var(--bg);padding:6px 10px;border-radius:5px;outline:none}
   button{cursor:pointer;background:var(--card);transition:all .15s}
   button:hover{border-color:var(--primary)}
   button.pri{background:var(--primary);border-color:var(--primary);color:#fff}
@@ -50,12 +67,14 @@
   input,select{width:100%}
   .addbar{display:flex;gap:8px;margin-top:10px}
   .addbar input{flex:1}
-  .kw{display:flex;align-items:center;gap:6px;background:#0d1117;
+  .pill{background:#2a3340;color:var(--muted);padding:2px 8px;
+        border-radius:10px;font-size:11px;margin-right:4px;display:inline-block;margin-bottom:2px}
+  .kw{display:flex;align-items:center;gap:6px;background:var(--bg);
       border:1px solid var(--line);border-radius:4px;padding:3px 8px;font-size:12px}
   .kw button{padding:0;border:none;background:none;color:var(--muted);font-size:14px;line-height:1}
   .kw button:hover{color:var(--danger)}
   .kws{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-  pre.log{background:#0d1117;border:1px solid var(--line);border-radius:5px;
+  pre.log{background:var(--bg);border:1px solid var(--line);border-radius:5px;
        padding:10px;max-height:400px;overflow:auto;font:11px/1.4 Menlo,Monaco,monospace;
        color:#b1bac4;white-space:pre-wrap;margin:0}
   .empty{color:var(--muted);text-align:center;padding:30px}
@@ -63,502 +82,580 @@
        border:1px solid var(--line);padding:12px 16px;border-radius:6px;z-index:99;
        box-shadow:0 4px 12px rgba(0,0,0,.4);max-width:400px}
   .toast.ok{border-color:var(--ok)} .toast.err{border-color:var(--danger)}
-  .ipa-item{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;
-       align-items:center;padding:8px;border-bottom:1px solid var(--line)}
-  .ipa-item img{width:32px;height:32px;border-radius:6px;background:#0d1117}
-  .ipa-item .meta{font-size:11px;color:var(--muted)}
   .switch{position:relative;display:inline-block;width:42px;height:22px}
   .switch input{display:none}
   .slider{position:absolute;inset:0;background:#3a4150;border-radius:22px;
        cursor:pointer;transition:.2s}
   .slider:before{content:"";position:absolute;width:16px;height:16px;
        left:3px;top:3px;background:white;border-radius:50%;transition:.2s}
-  input:checked + .slider{background:var(--primary)}
-  input:checked + .slider:before{transform:translateX(20px)}
+  input:checked+.slider{background:var(--primary)}
+  input:checked+.slider:before{transform:translateX(20px)}
   label.lbl{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-  @media (max-width:600px){.grid3{grid-template-columns:1fr}}
+  .code{font-family:Menlo,monospace;background:var(--bg);padding:2px 6px;border-radius:3px;font-size:12px}
+  .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+  .status-dot.on{background:var(--ok)} .status-dot.off{background:var(--muted)}
+
+  /* App 卡片网格 */
+  .app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+  .app-card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+            padding:16px;transition:border-color .15s}
+  .app-card:hover{border-color:var(--primary)}
+  .app-card-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .app-card-icon{width:48px;height:48px;border-radius:10px;background:var(--bg);
+                 object-fit:cover;flex-shrink:0}
+  .app-card-icon.missing{display:flex;align-items:center;justify-content:center;
+      font-size:24px;background:var(--card);border:1px solid var(--line)}
+  .app-card-title{font-size:16px;font-weight:600;line-height:1.3}
+  .app-card-count{font-size:11px;color:var(--muted)}
+  .app-card-desc{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4}
+  .app-card-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;
+                   font-size:12px;color:var(--primary);border:none;background:none;padding:4px 0}
+  .app-card-toggle:hover{color:#79b8ff}
+  .app-card-toggle .arrow{display:inline-block;transition:transform .2s;font-size:10px}
+  .app-card-toggle .arrow.open{transform:rotate(90deg)}
+  .version-list{margin-top:8px;max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .version-list.open{max-height:2000px}
+  .version-item{display:flex;align-items:center;gap:8px;padding:8px 0;
+                border-top:1px solid var(--line);font-size:12px}
+  .version-item .ver{color:var(--text);font-weight:500;min-width:60px}
+  .version-item .meta{color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  @media (max-width:768px){.sidebar{width:60px}.sidebar .nav-item span,.sidebar-logo .sub{display:none}.sidebar-logo h1{font-size:14px}.sidebar-bottom select{font-size:10px}}
 </style>
 </head>
 <body>
-<div class="wrap" x-data="ipaApp()" x-init="init()">
+<div class="app" x-data="ipaApp()" x-init="init()" :data-theme="currentTheme">
 
-  <div class="head">
-    <div>
-      <h1>📱 IPA Self-Host 控制台</h1>
-      <div class="stat">
-        IPA: <b x-text="status.ipa_count || 0"></b>个 ·
-        上次扫描: <b x-text="status.last_scan || '未知'"></b>
+  <!-- 左侧菜单栏 -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>📱 IPA Self-Host</h1>
+      <div class="sub" x-text="status.ipa_count ? status.ipa_count+' 个IPA' : '控制台'"></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item" :class="{active:tab==='apps'}" @click="tab='apps'">
+        <span class="icon">📱</span><span>App 总览</span>
+      </div>
+      <div class="nav-item" :class="{active:tab==='groups'}" @click="tab='groups'">
+        <span class="icon">📡</span><span>群组管理</span>
+      </div>
+      <div class="nav-item" :class="{active:tab==='whitelist'}" @click="tab='whitelist'">
+        <span class="icon">📦</span><span>关键词</span>
+      </div>
+      <div class="nav-item" :class="{active:tab==='bot'}" @click="tab='bot'">
+        <span class="icon">🤖</span><span>Bot 配置</span>
+      </div>
+      <div class="nav-item" :class="{active:tab==='account'}" @click="tab='account'">
+        <span class="icon">👤</span><span>账号</span>
+      </div>
+      <div class="nav-item" :class="{active:tab==='settings'}" @click="tab='settings'">
+        <span class="icon">⚙️</span><span>速率</span>
+      </div>
+      <div class="nav-item" :class="{active:tab==='proxy'}" @click="tab='proxy'">
+        <span class="icon">🌐</span><span>代理</span>
+      </div>
+      <div class="nav-item" :class="{active:tab==='logs'}" @click="tab='logs'">
+        <span class="icon">📜</span><span>日志</span>
+      </div>
+    </nav>
+    <div class="sidebar-bottom">
+      <select x-model="themeMode" @change="setTheme(themeMode)">
+        <option value="dark">🌙 夜间</option>
+        <option value="light">☀️ 日间</option>
+        <option value="auto">🌅 自动</option>
+      </select>
+      <button class="logout-btn" @click="logout()">退出登录</button>
+    </div>
+  </aside>
+
+  <!-- 主内容区 -->
+  <main class="main">
+    <div class="main-head">
+      <h2 x-text="tabTitle()"></h2>
+      <div class="actions">
+        <button class="pri" @click="triggerScan()" :disabled="scanning">
+          <span x-text="scanning ? '⏳ 扫描中...' : '🔄 立即扫描'"></span>
+        </button>
+        <button @click="loadAll()">↻ 刷新</button>
       </div>
     </div>
-    <div class="actions">
-      <button class="pri" @click="triggerScan()" :disabled="scanning">
-        <span x-text="scanning ? '⏳ 扫描中...' : '🔄 立即扫描'"></span>
-      </button>
-      <button @click="loadAll()">↻ 刷新</button>
-    </div>
-  </div>
 
-  <div class="tabs">
-    <div class="tab" :class="{on:tab==='groups'}" @click="tab='groups'">📡 群组</div>
-    <div class="tab" :class="{on:tab==='whitelist'}" @click="tab='whitelist'">📦 关键词</div>
-    <div class="tab" :class="{on:tab==='ipa'}" @click="tab='ipa'">💾 IPA 文件</div>
-    <div class="tab" :class="{on:tab==='unlock'}" @click="tab='unlock'">🔐 访问控制</div>
-    <div class="tab" :class="{on:tab==='account'}" @click="tab='account'">👤 账号</div>
-    <div class="tab" :class="{on:tab==='settings'}" @click="tab='settings'">⚙️ 速率</div>
-    <div class="tab" :class="{on:tab==='logs'}" @click="tab='logs'">📜 日志</div>
-  </div>
-
-  <!-- TAB: 群组 -->
-  <div x-show="tab==='groups'" class="card">
-    <h2>TG 群组列表（⭐ = 优先群，同版本优先采用）</h2>
-    <template x-if="!cfg.groups || !cfg.groups.length">
-      <div class="empty">还没有群组</div>
-    </template>
-    <template x-for="g in (cfg.groups||[])" :key="g">
-      <div class="row">
-        <button class="sm" @click="togglePriority(g)"
-                :title="cfg.priority_groups.includes(g)?'取消优先':'设为优先'"
-                x-text="cfg.priority_groups.includes(g)?'⭐':'☆'"></button>
-        <div class="grow"><a :href="g" target="_blank" style="color:#79b8ff;text-decoration:none" x-text="g"></a></div>
-        <button class="danger sm" @click="delGroup(g)">删除</button>
-      </div>
-    </template>
-    <div class="addbar">
-      <input x-model="newGroup" placeholder="https://t.me/xxx" @keydown.enter="addGroup()">
-      <button class="pri" @click="addGroup()">+ 添加群组</button>
-    </div>
-  </div>
-
-  <!-- TAB: 白名单 -->
-  <div x-show="tab==='whitelist'" class="card">
-    <h2>IPA 关键词白名单（只下载文件名含关键词的 IPA）</h2>
-    <template x-if="!cfg.whitelist || !cfg.whitelist.length">
-      <div class="empty">还没有白名单</div>
-    </template>
-    <template x-for="app in (cfg.whitelist||[])" :key="app.name">
-      <div class="row" style="display:block">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="grow"><b x-text="app.name"></b>
-            <span style="color:var(--muted);font-size:12px" x-text="'（'+app.keywords.length+' 个关键词）'"></span>
-          </div>
-          <button class="danger sm" @click="delApp(app.name)">删 App</button>
-        </div>
-        <div class="kws">
-          <template x-for="(k,i) in app.keywords" :key="k">
-            <div class="kw">
-              <span x-text="k"></span>
-              <button @click="delKeyword(app,i)" title="删关键词">×</button>
+    <!-- App 总览 -->
+    <div x-show="tab==='apps'">
+      <template x-if="!appGroups.length">
+        <div class="empty">还没有 IPA 文件，点击「立即扫描」从 TG 群组下载</div>
+      </template>
+      <div class="app-grid">
+        <template x-for="app in appGroups" :key="app.name">
+          <div class="app-card">
+            <div class="app-card-header">
+              <img class="app-card-icon" :class="{missing: !app.icon}"
+                   :src="app.icon ? '/static/icons/' + app.icon : ''"
+                   @error="$el.classList.add('missing');$el.src=''"
+                   x-show="app.icon">
+              <div x-show="!app.icon" class="app-card-icon missing" x-text="app.name.charAt(0)"></div>
+              <div>
+                <div class="app-card-title" x-text="app.name"></div>
+                <div class="app-card-count" x-text="app.versions.length + ' 个版本'"></div>
+              </div>
             </div>
-          </template>
-          <div class="kw" style="background:transparent">
-            <input style="background:transparent;border:none;padding:0;width:120px"
-                   :placeholder="'+ 加关键词'"
-                   x-model="newKw[app.name]"
-                   @keydown.enter="addKeyword(app)">
+            <div class="app-card-desc" x-text="getAppDesc(app.name)"></div>
+            <button class="app-card-toggle" @click="app.expanded = !app.expanded">
+              <span class="arrow" :class="{open: app.expanded}">▶</span>
+              <span x-text="app.expanded ? '收起' : '展开版本（' + app.versions.length + '）'"></span>
+            </button>
+            <div class="version-list" :class="{open: app.expanded}">
+              <template x-for="v in app.versions" :key="v.filename">
+                <div class="version-item">
+                  <span class="ver" x-text="'v' + v.version"></span>
+                  <span class="meta" x-text="v.size_mb + ' MB · ' + v.mtime_str"></span>
+                  <button class="sm" @click="downloadIpa(v.filename)">⬇</button>
+                  <button class="danger sm" @click="delIpaSingle(v.filename)">删</button>
+                </div>
+              </template>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
-    </template>
-    <div style="border-top:1px dashed var(--line);margin-top:14px;padding-top:14px">
-      <label class="lbl">新增 App</label>
+    </div>
+
+    <!-- 群组 -->
+    <div x-show="tab==='groups'" class="card">
+      <h3>TG 群组列表（⭐ = 优先群，同版本优先采用）</h3>
+      <template x-if="!cfg.groups || !cfg.groups.length"><div class="empty">还没有群组</div></template>
+      <template x-for="g in (cfg.groups||[])" :key="g">
+        <div class="row">
+          <button class="sm" @click="togglePriority(g)"
+                  :title="cfg.priority_groups.includes(g)?'取消优先':'设为优先'"
+                  x-text="cfg.priority_groups.includes(g)?'⭐':'☆'"></button>
+          <div class="grow"><a :href="g" target="_blank" style="color:#79b8ff;text-decoration:none" x-text="g"></a></div>
+          <button class="danger sm" @click="delGroup(g)">删除</button>
+        </div>
+      </template>
       <div class="addbar">
-        <input x-model="newApp.name" placeholder="App 名称（如 YouTube）" style="flex:1">
-        <input x-model="newApp.keywords" placeholder="关键词 1, 关键词 2, ..." style="flex:2">
-        <button class="pri" @click="addApp()">+ 添加</button>
+        <input x-model="newGroup" placeholder="https://t.me/xxx" @keydown.enter="addGroup()">
+        <button class="pri" @click="addGroup()">+ 添加群组</button>
       </div>
     </div>
-  </div>
 
-  <!-- TAB: IPA 文件 -->
-  <div x-show="tab==='ipa'" class="card">
-    <h2>
-      <span>已下载 IPA 文件（<span x-text="ipaList.length"></span> 个）</span>
-      <span>
-        <button class="sm" @click="loadIpa()">↻ 刷新</button>
-        <button class="danger sm" :disabled="!selected.length"
-                @click="delIpaBatch()">删除选中（<span x-text="selected.length"></span>）</button>
-      </span>
-    </h2>
-    <template x-if="!ipaList.length">
-      <div class="empty">没有 IPA 文件</div>
-    </template>
-    <template x-for="f in ipaList" :key="f.filename">
-      <div class="ipa-item">
-        <input type="checkbox" :value="f.filename" x-model="selected" style="width:auto">
-        <div>
-          <div x-text="f.app_name || f.filename" style="font-weight:500"></div>
-          <div class="meta">
-            <span x-text="'v'+f.version" x-show="f.version"></span>
-            <span x-text="' · '+f.size_mb+' MB'"></span>
-            <span x-text="' · '+f.mtime_str"></span>
-            <span x-text="' · '+f.filename" style="opacity:.6"></span>
+    <!-- 关键词 -->
+    <div x-show="tab==='whitelist'" class="card">
+      <h3>IPA 关键词白名单（只下载文件名含关键词的 IPA）</h3>
+      <template x-if="!cfg.whitelist || !cfg.whitelist.length"><div class="empty">还没有白名单</div></template>
+      <template x-for="app in (cfg.whitelist||[])" :key="app.name">
+        <div class="row" style="display:block">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="grow"><b x-text="app.name"></b>
+              <span style="color:var(--muted);font-size:12px" x-text="'（'+app.keywords.length+' 个关键词）'"></span>
+            </div>
+            <button class="danger sm" @click="delApp(app.name)">删 App</button>
+          </div>
+          <div class="kws">
+            <template x-for="(k,i) in app.keywords" :key="k">
+              <div class="kw"><span x-text="k"></span><button @click="delKeyword(app,i)" title="删关键词">×</button></div>
+            </template>
+            <div class="kw" style="background:transparent">
+              <input style="background:transparent;border:none;padding:0;width:120px"
+                     :placeholder="'+ 加关键词'" x-model="newKw[app.name]"
+                     @keydown.enter="addKeyword(app)">
+            </div>
           </div>
         </div>
-        <button class="sm" @click="downloadIpa(f.filename)" title="下载">⬇</button>
-        <button class="danger sm" @click="delIpaSingle(f.filename)">删</button>
-      </div>
-    </template>
-  </div>
-
-  <!-- TAB: 访问控制 -->
-  <div x-show="tab==='unlock'" class="card">
-    <h2>🔐 访问控制</h2>
-    <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
-      订阅链接通过服务端 <b>Token</b> 防外传——只有 URL 里带正确 token 的请求才能访问软件源和下载 IPA。<br>
-      客户端（Esign/轻松签）无需输入解锁码，直接添加完整源链接即可。<br>
-      <b style="color:var(--warn)">⚠️ 重新生成 Token 后，所有已分享的订阅链接立即失效，必须用新链接重新订阅！</b>
-    </div>
-
-    <!-- Token 管理 -->
-    <div style="border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:14px;background:#0d1117">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-weight:600">访问 Token</div>
-        <span style="font-size:11px" :style="{color: unlock.has_token ? 'var(--ok)' : 'var(--danger)'}"
-              x-text="unlock.has_token ? '✅ 已启用' : '❌ 未设置'"></span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <code style="flex:1;background:#161b22;padding:6px 10px;border-radius:4px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-              x-text="unlock.token_preview || '(未设置)'"></code>
-        <button class="danger sm" @click="regenerateToken()"
-                :disabled="!unlock.has_token"
-                :title="unlock.has_token ? '重新生成 Token（旧链接失效）' : '未设置 Token'">🔄 重新生成</button>
-      </div>
-      <div style="font-size:11px;color:var(--muted)">
-        Token 只在创建时完整显示一次；这里只展示首尾4位指纹，用于比对确认。<br>
-        完整订阅链接请查看 Obsidian 技术档案。
+      </template>
+      <div style="border-top:1px dashed var(--line);margin-top:14px;padding-top:14px">
+        <label class="lbl">新增 App</label>
+        <div class="addbar">
+          <input x-model="newApp.name" placeholder="App 名称（如 YouTube）" style="flex:1">
+          <input x-model="newApp.keywords" placeholder="关键词 1, 关键词 2, ..." style="flex:2">
+          <button class="pri" @click="addApp()">+ 添加</button>
+        </div>
       </div>
     </div>
 
-    <!-- 订阅路径 -->
-    <div style="border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:14px;background:#0d1117">
-      <div style="font-weight:600;margin-bottom:8px">订阅路径</div>
-      <div class="row" style="border:none;padding:4px 0">
-        <div style="width:80px;font-size:12px;color:var(--muted)">路径</div>
-        <code style="flex:1;background:#161b22;padding:6px 10px;border-radius:4px;font-size:13px"
-              x-text="'/' + (unlock.enabled ? unlock.code : 'repo')"></code>
+    <!-- 🤖 Bot 配置 -->
+    <div x-show="tab==='bot'" class="card">
+      <h3>Telegram Bot 配置</h3>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
+        配置 Bot Token 用于自动通知。Bot 需先被加入目标群组并授予读消息权限。
+        <br>Token 通过 <a href="https://t.me/BotFather" target="_blank" style="color:var(--primary)">@BotFather</a> 获取。
       </div>
-      <div class="row" style="border:none;padding:4px 0">
-        <div style="width:80px;font-size:12px;color:var(--muted)">启用</div>
-        <label class="switch">
-          <input type="checkbox" x-model="unlock.enabled">
-          <span class="slider"></span>
-        </label>
+      <div class="row">
+        <div style="width:100px">Bot Token</div>
+        <input style="flex:1" x-model="botCfg.token" placeholder="123456:ABC-DEF1234gh..." type="password">
       </div>
-      <div class="row" style="border:none;padding:4px 0" x-show="unlock.enabled">
-        <div style="width:80px;font-size:12px;color:var(--muted)">路径码</div>
-        <input style="flex:1" x-model="unlock.code" :disabled="!unlock.enabled"
-               placeholder="4-32 位字母数字" maxlength="32">
+      <div class="row">
+        <div style="width:100px">状态</div>
+        <div>
+          <template x-if="botCfg.has_token && botCfg.bot_username">
+            <span><span class="status-dot on"></span>已连接 @<span x-text="botCfg.bot_username"></span></span>
+          </template>
+          <template x-if="!botCfg.has_token || !botCfg.bot_username">
+            <span><span class="status-dot off"></span>未配置</span>
+          </template>
+        </div>
+      </div>
+      <div class="row" x-show="botCfg.has_token">
+        <div style="width:100px">当前 Token</div>
+        <span class="code" x-text="botCfg.token_preview || '***'"></span>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="pri" @click="saveBot()" :disabled="botSaving">
+          <span x-text="botSaving ? '⏳ 验证中...' : '💾 保存并验证'"></span>
+        </button>
+        <button @click="testBot()" :disabled="botTesting || !botCfg.has_token" x-show="botCfg.has_token">
+          <span x-text="botTesting ? '⏳ 测试中...' : '🔍 测试连接'"></span>
+        </button>
+      </div>
+      <div x-show="botTestResult" style="margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:6px;font-size:13px">
+        <template x-if="botTestResult.ok">
+          <div style="color:var(--ok)">✅ Bot 连接正常: @<span x-text="botTestResult.bot?.username"></span> (<span x-text="botTestResult.bot?.name"></span>)</div>
+        </template>
+        <template x-if="!botTestResult.ok">
+          <div style="color:var(--danger)">❌ <span x-text="botTestResult.error"></span></div>
+        </template>
       </div>
     </div>
 
-    <div style="margin-top:14px;display:flex;gap:10px">
-      <button class="pri" @click="saveUnlock()">💾 保存路径</button>
-      <button class="warn" @click="restartContainer()">↻ 保存并重启容器</button>
-    </div>
-  </div>
-
-  <!-- TAB: 账号 -->
-  <div x-show="tab==='account'" class="card">
-    <h2>修改 WebUI 登录密码</h2>
-    <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
-      用户名固定为 <code>admin</code>（如需修改用户名请改容器 env <code>WEBUI_USER</code>）。
-      <br>密码保存在 <code>/config/webui_pass.json</code>，重启容器不丢失。
-      <br><b style="color:var(--warn)">改完后浏览器会要求重新输入密码登录。</b>
-    </div>
-    <div class="row">
-      <div style="width:120px">当前密码</div>
-      <input style="flex:1" type="password" x-model="pw.old" placeholder="当前登录密码">
-    </div>
-    <div class="row">
-      <div style="width:120px">新密码</div>
-      <input style="flex:1" type="password" x-model="pw.new" placeholder="4-64 位" maxlength="64">
-    </div>
-    <div class="row">
-      <div style="width:120px">确认新密码</div>
-      <input style="flex:1" type="password" x-model="pw.confirm" placeholder="再输一遍" maxlength="64">
-    </div>
-    <div style="margin-top:14px">
-      <button class="pri" @click="changePassword()">🔑 修改密码</button>
-    </div>
-  </div>
-
-  <!-- TAB: 速率 -->
-  <div x-show="tab==='settings'" class="card">
-    <h2>下载速率限制</h2>
-    <div class="grid3">
-      <div>
-        <label class="lbl">每日最多下载数</label>
-        <input type="number" x-model.number="cfg.rate_limit.max_per_day" min="1">
+    <!-- 账号 -->
+    <div x-show="tab==='account'" class="card">
+      <h3>修改登录密码</h3>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
+        用户名固定为 <code>admin</code>。密码保存在 <code>/config/webui_pass.json</code>，重启不丢失。
+        <br><b style="color:var(--warn)">改完后需重新登录。</b>
       </div>
-      <div>
-        <label class="lbl">最小间隔（秒）</label>
-        <input type="number" x-model.number="cfg.rate_limit.min_interval_sec" min="1">
+      <div class="row"><div style="width:120px">当前密码</div><input style="flex:1" type="password" x-model="pw.old"></div>
+      <div class="row"><div style="width:120px">新密码</div><input style="flex:1" type="password" x-model="pw.new" maxlength="64"></div>
+      <div class="row"><div style="width:120px">确认</div><input style="flex:1" type="password" x-model="pw.confirm" maxlength="64"></div>
+      <div style="margin-top:14px"><button class="pri" @click="changePassword()">🔑 修改密码</button></div>
+    </div>
+
+    <!-- 速率 -->
+    <div x-show="tab==='settings'" class="card">
+      <h3>下载速率限制</h3>
+      <div class="grid3">
+        <div><label class="lbl">每日最多下载</label><input type="number" x-model.number="cfg.rate_limit.max_per_day" min="1"></div>
+        <div><label class="lbl">最小间隔（秒）</label><input type="number" x-model.number="cfg.rate_limit.min_interval_sec" min="1"></div>
+        <div><label class="lbl">最大间隔（秒）</label><input type="number" x-model.number="cfg.rate_limit.max_interval_sec" min="1"></div>
       </div>
-      <div>
-        <label class="lbl">最大间隔（秒）</label>
-        <input type="number" x-model.number="cfg.rate_limit.max_interval_sec" min="1">
+      <div style="margin-top:14px"><button class="pri" @click="saveRate()">💾 保存</button></div>
+    </div>
+
+    <!-- 代理 -->
+    <div x-show="tab==='proxy'" class="card">
+      <h3>网络代理设置</h3>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:12px">代理用于访问 Telegram API 和下载 IPA。转发 Bot 立即生效；定时扫描需重启容器。</div>
+      <div class="row" style="display:block">
+        <label class="lbl">代理地址</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input :value="proxyCfg.url" @input="proxyCfg.url=$event.target.value" placeholder="socks5://10.0.0.100:7893" style="flex:1">
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap">
+            <input type="checkbox" x-model="proxyCfg.enabled" style="width:auto"> 启用
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <label class="lbl">快捷预设</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+          <template x-for="p in proxyPresets" :key="p.url">
+            <button class="sm" :style="proxyCfg.url===p.url ? 'border-color:var(--primary);color:var(--primary)' : ''"
+                    @click="proxyCfg.url=p.url; proxyCfg.source='preset'" x-text="p.name" :title="p.desc"></button>
+          </template>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="pri" @click="saveProxy()" :disabled="proxySaving">💾 保存</button>
+        <button @click="testProxy()" :disabled="proxyTesting"><span x-text="proxyTesting?'⏳ 测试中...':'🔍 测试连通性'"></span></button>
+      </div>
+      <div x-show="proxyTestResult" style="margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:6px;font-size:13px">
+        <template x-if="proxyTestResult">
+          <div><div style="margin-bottom:6px"><span x-text="proxyTestResult.ok ? '✅ 代理可用' : '❌ 代理不可用'"></span></div>
+          <template x-if="proxyTestResult.tests">
+            <div style="font-size:12px;color:var(--muted)">
+              <div>Telegram(代理): <span :style="{color:proxyTestResult.tests.telegram_via_proxy?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.telegram_via_proxy?.ok?'✓ '+proxyTestResult.tests.telegram_via_proxy?.latency_ms+'ms':'✗'"></span></div>
+              <div>Google(代理): <span :style="{color:proxyTestResult.tests.google_via_proxy?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.google_via_proxy?.ok?'✓ '+proxyTestResult.tests.google_via_proxy?.latency_ms+'ms':'✗'"></span></div>
+              <div>Telegram(直连): <span :style="{color:proxyTestResult.tests.telegram_direct?.ok?'var(--ok)':'var(--danger)'}" x-text="proxyTestResult.tests.telegram_direct?.ok?'✓ '+proxyTestResult.tests.telegram_direct?.latency_ms+'ms':'✗ (需代理)'"></span></div>
+            </div>
+          </template></div>
+        </template>
       </div>
     </div>
-    <div style="margin-top:14px">
-      <button class="pri" @click="saveRate()">💾 保存</button>
+
+    <!-- 日志 -->
+    <div x-show="tab==='logs'" class="card">
+      <h3 style="display:flex;justify-content:space-between;align-items:center">
+        <span>实时日志</span>
+        <span>
+          <select x-model="logName" @change="loadLog()" style="width:auto;padding:3px 8px;font-size:12px">
+            <option value="tg-cron">TG 扫描</option>
+            <option value="scanner">仓库扫描</option>
+            <option value="nginx-error">Nginx 错误</option>
+          </select>
+          <button class="sm" @click="loadLog()">↻</button>
+          <label style="font-size:12px;color:var(--muted)"><input type="checkbox" x-model="autoRefresh" style="width:auto"> 自动刷新</label>
+        </span>
+      </h3>
+      <pre class="log" x-text="logContent || '(空)'"></pre>
     </div>
-  </div>
+  </main>
 
-  <!-- TAB: 日志 -->
-  <div x-show="tab==='logs'" class="card">
-    <h2>
-      <span>实时日志</span>
-      <span>
-        <select x-model="logName" @change="loadLog()" style="width:auto;padding:3px 8px;font-size:12px">
-          <option value="tg-cron">TG 扫描日志</option>
-          <option value="scanner">IPA 仓库扫描</option>
-          <option value="nginx-error">Nginx 错误</option>
-        </select>
-        <button class="sm" @click="loadLog()">↻</button>
-        <label style="font-size:12px;color:var(--muted)">
-          <input type="checkbox" x-model="autoRefresh" style="width:auto"> 自动刷新（3s）
-        </label>
-      </span>
-    </h2>
-    <pre class="log" x-text="logContent || '(空)'"></pre>
-  </div>
-
-  <!-- 全局 Toast -->
-  <div x-show="toast.msg" x-transition class="toast" :class="toast.type"
-       @click="toast.msg=''" x-text="toast.msg"></div>
-
+  <!-- Toast -->
+  <div x-show="toast.msg" x-transition class="toast" :class="toast.type" @click="toast.msg=''" x-text="toast.msg"></div>
 </div>
 
 <script>
+const APP_DESC = {
+  '小红书':'浏览笔记、种草攻略、本地生活。',
+  'YouTube':'看视频、订阅频道、管理播放列表。',
+  'YouTube Music':'听歌、管理歌单、发现新音乐。',
+  '哔哩哔哩':'看番剧、视频、直播和关注 UP 主。',
+  'Spotify':'听歌、管理歌单、收听播客。',
+  '高德地图':'驾车、步行、公交路线规划和实时路况。',
+  '百度地图':'路线规划、公交地铁、位置搜索。',
+  '闲鱼':'二手闲置交易、捡漏好物。',
+  'Swiftgram':'Telegram 第三方客户端，高级功能。',
+  'Infuse':'视频播放器，自动匹配字幕和海报墙。',
+  '知乎':'问答社区，专业讨论和知识分享。',
+  'PiliPlus':'哔哩哔哩第三方客户端，清爽无广告。',
+  '抖音':'短视频创作、观看和直播互动。',
+  'Facebook':'社交网络，分享动态和联系朋友。',
+  'X':'实时信息、社交讨论和新闻关注。',
+  'Shadowrocket':'iOS 网络代理工具。',
+  'Bit远控助手':'远程控制工具。',
+};
+
+const TAB_TITLES = {
+  apps:'📱 App 总览', groups:'📡 群组管理', whitelist:'📦 关键词白名单',
+  bot:'🤖 Telegram Bot 配置', account:'👤 修改密码', settings:'⚙️ 速率限制',
+  proxy:'🌐 网络代理', logs:'📜 实时日志'
+};
+
+// ====== 日出日落计算 (auto theme) ======
+function calcSunriseSunset(lat, lng) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now - start;
+  const dayOfYear = Math.floor(diff / 86400000);
+  
+  const zenith = 90.833;
+  const D2R = Math.PI / 180;
+  const R2D = 180 / Math.PI;
+  
+  const lngHour = lng / 15;
+  const tRise = dayOfYear + ((6 - lngHour) / 24);
+  const tSet = dayOfYear + ((18 - lngHour) / 24);
+  
+  function calc(t) {
+    const M = (0.9856 * t) - 3.289;
+    const L = M + (1.916 * Math.sin(M * D2R)) + (0.020 * Math.sin(2 * M * D2R)) + 282.634;
+    let Lnorm = L % 360; if (Lnorm < 0) Lnorm += 360;
+    const RA = R2D * Math.atan(0.91764 * Math.tan(Lnorm * D2R));
+    let RAnorm = RA % 360;
+    const Lquad = Math.floor(Lnorm / 90) * 90;
+    const RAquad = Math.floor(RAnorm / 90) * 90;
+    RAnorm += (Lquad - RAquad);
+    RAnorm /= 15;
+    const sinDec = 0.39782 * Math.sin(Lnorm * D2R);
+    const cosDec = Math.cos(Math.asin(sinDec));
+    const cosH = (Math.cos(zenith * D2R) - (sinDec * Math.sin(lat * D2R))) / (cosDec * Math.cos(lat * D2R));
+    if (cosH > 1) return -1; // no sunrise
+    if (cosH < -1) return -2; // no sunset
+    const H = R2D * Math.acos(cosH) / 15;
+    return H;
+  }
+  
+  const hRise = calc(tRise);
+  const hSet = calc(tSet);
+  if (hRise < 0 || hSet < 0) return null;
+  
+  const riseHour = Math.floor(hRise); const riseMin = Math.round((hRise - riseHour) * 60);
+  const setHour = Math.floor(hSet); const setMin = Math.round((hSet - setHour) * 60);
+  
+  return {
+    sunrise: riseHour * 60 + riseMin,
+    sunset: setHour * 60 + setMin
+  };
+}
+
 function ipaApp() {
   return {
-    tab: 'groups',
+    tab: 'apps',
     cfg: { groups:[], priority_groups:[], whitelist:[], rate_limit:{} },
-    status: {},
-    unlock: { enabled:true, code:'142536', token_preview:'', has_token:false },
-    pw: { old:'', new:'', confirm:'' },
-    ipaList: [],
-    selected: [],
-    newGroup: '',
-    newApp: { name:'', keywords:'' },
-    newKw: {},
-    scanning: false,
-    logName: 'tg-cron',
-    logContent: '',
-    autoRefresh: false,
-    toast: { msg:'', type:'ok' },
-    _logTimer: null,
+    status: {}, pw: { old:'', new:'', confirm:'' },
+    ipaList: [], appGroups: [], newGroup: '', newApp: { name:'', keywords:'' }, newKw: {},
+    scanning: false, logName: 'tg-cron', logContent: '', autoRefresh: false,
+    toast: { msg:'', type:'ok' }, _logTimer: null,
+
+    // Theme
+    themeMode: 'dark',
+    currentTheme: 'dark',
+    sunriseMin: null, sunsetMin: null,
+    _themeInterval: null,
+
+    // Bot
+    botCfg: { token:'', enabled:true, token_preview:'', has_token:false, bot_username:'', chat_id:'' },
+    botSaving: false, botTesting: false, botTestResult: null,
+
+    // Proxy
+    proxyCfg: { url:'', enabled:true, source:'', env_tg_proxy:'', env_forward_proxy:'' },
+    proxyPresets: [], proxySaving:false, proxyTesting:false, proxyTestResult:null,
 
     async init() {
+      // Theme
+      this.themeMode = localStorage.getItem('ipa-theme-mode') || 'dark';
+      await this.applyTheme();
+      // Auto theme: try geolocation for sunrise/sunset
+      if (this.themeMode === 'auto') {
+        try {
+          navigator.geolocation.getCurrentPosition(pos => {
+            const s = calcSunriseSunset(pos.coords.latitude, pos.coords.longitude);
+            if (s) { this.sunriseMin = s.sunrise; this.sunsetMin = s.sunset; this.applyTheme(); }
+          }, () => {}, { timeout: 5000 });
+        } catch(e) {}
+      }
+      this._themeInterval = setInterval(() => {
+        if (this.themeMode === 'auto') this.applyTheme();
+      }, 60000);
+
       await this.loadAll();
-      // 自动刷新日志
+      await this.loadProxy();
+      await this.loadBot();
       setInterval(() => {
         if (this.tab === 'logs' && this.autoRefresh) this.loadLog();
-        if (this.tab === 'ipa') this.loadStatus();
+        if (this.tab === 'apps') this.loadStatus();
       }, 3000);
     },
 
-    async loadAll() {
-      await Promise.all([this.loadConfig(), this.loadStatus(), this.loadUnlock(), this.loadIpa()]);
+    tabTitle() { return TAB_TITLES[this.tab] || ''; },
+    getAppDesc(name) { return APP_DESC[name] || 'iOS 应用安装包。'; },
+
+    applyTheme() {
+      if (this.themeMode === 'auto') {
+        if (this.sunriseMin !== null && this.sunsetMin !== null) {
+          const now = new Date();
+          const mins = now.getHours() * 60 + now.getMinutes();
+          this.currentTheme = (mins >= this.sunriseMin && mins < this.sunsetMin) ? 'light' : 'dark';
+        } else {
+          this.currentTheme = 'dark'; // fallback if no geolocation
+        }
+      } else {
+        this.currentTheme = this.themeMode;
+      }
+      localStorage.setItem('ipa-theme-mode', this.themeMode);
+    },
+    setTheme(mode) { this.themeMode = mode; this.applyTheme(); if (mode === 'auto' && !this.sunriseMin) { try { navigator.geolocation.getCurrentPosition(pos => { const s = calcSunriseSunset(pos.coords.latitude, pos.coords.longitude); if (s) { this.sunriseMin = s.sunrise; this.sunsetMin = s.sunset; this.applyTheme(); } }, () => {}, {timeout:5000}); } catch(e) {} } },
+
+    groupApps() {
+      const map = {};
+      for (const f of this.ipaList) {
+        const name = f.app_name || f.filename.replace(/_\d+[\.\d]*_.+\.ipa$/, '');
+        if (!map[name]) map[name] = { name, icon: null, versions: [], expanded: false };
+        if (f.icon && !map[name].icon) map[name].icon = f.icon;
+        map[name].versions.push(f);
+      }
+      const arr = Object.values(map);
+      arr.sort((a,b) => a.name.localeCompare(b.name, 'zh-CN'));
+      for (const g of arr) g.versions.sort((a,b) => b.mtime - a.mtime);
+      this.appGroups = arr;
     },
 
+    // ====== API helpers ======
     async api(method, url, body) {
       try {
-        const r = await fetch(url, {
-          method, headers: {'Content-Type':'application/json'},
-          body: body ? JSON.stringify(body) : undefined
-        });
+        const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined });
+        if (r.status === 401) { window.location.href = '/login'; throw new Error('登录已过期'); }
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || r.statusText);
         return j;
-      } catch (e) {
-        this.showToast(e.message, 'err');
-        throw e;
-      }
+      } catch(e) { this.showToast(e.message, 'err'); throw e; }
     },
+    showToast(msg, type='ok') { this.toast = { msg, type }; setTimeout(() => this.toast.msg = '', 3000); },
 
-    showToast(msg, type='ok') {
-      this.toast = { msg, type };
-      setTimeout(() => this.toast.msg = '', 3000);
-    },
-
-    async loadConfig() {
-      const c = await this.api('GET', '/api/config');
-      // 兜底 rate_limit 字段
-      c.rate_limit = c.rate_limit || { max_per_day:30, min_interval_sec:30, max_interval_sec:120 };
-      this.cfg = c;
-    },
-    async loadStatus() {
-      this.status = await this.api('GET', '/api/status');
-    },
-    async loadUnlock() {
-      this.unlock = await this.api('GET', '/api/unlock');
-    },
-    async loadIpa() {
-      const r = await this.api('GET', '/api/ipa');
-      this.ipaList = r.files;
-    },
+    async loadAll() { await Promise.all([this.loadConfig(), this.loadStatus(), this.loadIpa()]); },
+    async loadConfig() { const c = await this.api('GET','/api/config'); c.rate_limit = c.rate_limit || {max_per_day:30,min_interval_sec:30,max_interval_sec:120}; this.cfg = c; },
+    async loadStatus() { this.status = await this.api('GET','/api/status'); },
+    async loadIpa() { const r = await this.api('GET','/api/ipa'); this.ipaList = r.files; this.groupApps(); },
     async loadLog() {
-      const r = await fetch('/api/logs/' + this.logName + '?lines=300');
-      const j = await r.json();
-      this.logContent = (j.lines || []).join('');
-      // 自动滚到底部
-      this.$nextTick(() => {
-        const pre = document.querySelector('pre.log');
-        if (pre) pre.scrollTop = pre.scrollHeight;
-      });
+      const r = await fetch('/api/logs/'+this.logName+'?lines=300');
+      if (r.status===401) { window.location.href='/login'; return; }
+      const j = await r.json(); this.logContent = (j.lines||[]).join('');
+      this.$nextTick(()=>{const pre=document.querySelector('pre.log'); if(pre) pre.scrollTop=pre.scrollHeight;});
     },
 
-    // 群组
-    async addGroup() {
-      if (!this.newGroup.trim()) return;
-      await this.api('POST', '/api/groups', { url: this.newGroup.trim() });
-      this.newGroup = '';
-      await this.loadConfig();
-      this.showToast('已添加');
-    },
-    async delGroup(url) {
-      if (!confirm('删除群组：' + url + '？')) return;
-      await this.api('DELETE', '/api/groups', { url });
-      await this.loadConfig();
-      this.showToast('已删除');
-    },
-    async togglePriority(url) {
-      await this.api('POST', '/api/groups/priority', { url });
-      await this.loadConfig();
-    },
+    // ====== 群组 ======
+    async addGroup() { if (!this.newGroup.trim()) return; await this.api('POST','/api/groups',{url:this.newGroup.trim()}); this.newGroup=''; await this.loadConfig(); this.showToast('已添加'); },
+    async delGroup(url) { if (!confirm('删除 : '+url+' ？')) return; await this.api('DELETE','/api/groups',{url}); await this.loadConfig(); this.showToast('已删除'); },
+    async togglePriority(url) { await this.api('POST','/api/groups/priority',{url}); await this.loadConfig(); },
 
-    // 白名单
+    // ====== 白名单 ======
     async addApp() {
-      const name = this.newApp.name.trim();
-      const kws = this.newApp.keywords.split(',').map(s=>s.trim()).filter(Boolean);
-      if (!name || !kws.length) {
-        this.showToast('App 名称 + 至少一个关键词', 'err');
-        return;
-      }
-      await this.api('POST', '/api/whitelist', { name, keywords: kws });
-      this.newApp = { name:'', keywords:'' };
-      await this.loadConfig();
-      this.showToast('已添加');
+      const name=this.newApp.name.trim(), kws=this.newApp.keywords.split(',').map(s=>s.trim()).filter(Boolean);
+      if (!name||!kws.length){this.showToast('App 名称+至少一个关键词','err');return;}
+      await this.api('POST','/api/whitelist',{name,keywords:kws}); this.newApp={name:'',keywords:''}; await this.loadConfig(); this.showToast('已添加');
     },
-    async delApp(name) {
-      if (!confirm('删除整个 App "' + name + '" 的白名单？')) return;
-      await this.api('DELETE', '/api/whitelist', { name });
-      await this.loadConfig();
-      this.showToast('已删除');
-    },
+    async delApp(name) { if (!confirm('删除 "'+name+'" 的白名单？')) return; await this.api('DELETE','/api/whitelist',{name}); await this.loadConfig(); this.showToast('已删除'); },
     async addKeyword(app) {
-      const k = (this.newKw[app.name] || '').trim();
-      if (!k) return;
-      if (app.keywords.includes(k)) {
-        this.showToast('关键词已存在', 'err');
-        return;
-      }
-      const next = [...app.keywords, k];
-      await this.api('PUT', '/api/whitelist', { name: app.name, keywords: next });
-      this.newKw[app.name] = '';
-      await this.loadConfig();
+      const k=(this.newKw[app.name]||'').trim(); if(!k)return;
+      if(app.keywords.includes(k)){this.showToast('关键词已存在','err');return;}
+      await this.api('PUT','/api/whitelist',{name:app.name,keywords:[...app.keywords,k]});
+      this.newKw[app.name]=''; await this.loadConfig();
     },
     async delKeyword(app, idx) {
-      const next = app.keywords.filter((_,i) => i !== idx);
-      if (!next.length) {
-        if (!confirm('这是最后一个关键词，删除后整个 App 也会被移除。继续？')) return;
-        await this.api('DELETE', '/api/whitelist', { name: app.name });
-      } else {
-        await this.api('PUT', '/api/whitelist', { name: app.name, keywords: next });
-      }
+      const next=app.keywords.filter((_,i)=>i!==idx);
+      if(!next.length){if(!confirm('最后关键词，删除后App也会移除。继续？'))return; await this.api('DELETE','/api/whitelist',{name:app.name});}
+      else{await this.api('PUT','/api/whitelist',{name:app.name,keywords:next});}
       await this.loadConfig();
     },
 
-    // IPA 文件
+    // ====== IPA 文件 ======
     async delIpaSingle(filename) {
-      if (!confirm('确认删除 "' + filename + '"？\n（同时删除图标，下次扫描可重新下载该版本）')) return;
-      const r = await this.api('DELETE', '/api/ipa', { filenames: [filename] });
-      await this.loadIpa(); await this.loadStatus();
-      this.showToast('已删除 ' + r.deleted.length + ' 个');
+      if(!confirm('确认删除 "'+filename+'"？'))return;
+      await this.api('DELETE','/api/ipa',{filenames:[filename]}); await this.loadIpa(); await this.loadStatus(); this.showToast('已删除');
     },
-    async delIpaBatch() {
-      if (!this.selected.length) return;
-      if (!confirm('删除 ' + this.selected.length + ' 个 IPA 文件？')) return;
-      const r = await this.api('DELETE', '/api/ipa', { filenames: this.selected });
-      this.selected = [];
-      await this.loadIpa(); await this.loadStatus();
-      this.showToast('已删除 ' + r.deleted.length + ' 个');
-    },
-    downloadIpa(filename) {
-      // 通过 nginx 公开路径直接下载
-      window.open('/_ipa_proxy/' + encodeURIComponent(filename), '_blank');
-    },
+    downloadIpa(filename) { window.open('/_ipa_proxy/'+encodeURIComponent(filename),'_blank'); },
 
-    // 速率
-    async saveRate() {
-      await this.api('PUT', '/api/rate_limit', this.cfg.rate_limit);
-      this.showToast('已保存');
-    },
+    // ====== 速率 ======
+    async saveRate() { await this.api('PUT','/api/rate_limit',this.cfg.rate_limit); this.showToast('已保存'); },
 
-    // 访问控制
-    async saveUnlock() {
-      await this.api('PUT', '/api/unlock', this.unlock);
-      this.showToast('已保存（需重启容器生效）');
-    },
-    async regenerateToken() {
-      if (!confirm('重新生成 Token？\n\n⚠️ 所有已分享的订阅链接将立即失效！\n必须在手机上用新链接重新订阅。\n\n确定？')) return;
-      const r = await this.api('DELETE', '/api/unlock');
-      await this.loadUnlock();
-      this.showToast('Token 已重新生成！新指纹: ' + r.token_preview + '（需重启容器生效）');
-    },
-    async restartContainer() {
-      await this.api('PUT', '/api/unlock', this.unlock);
-      if (!confirm('容器将重启（约 10 秒）。继续？')) return;
-      await this.api('POST', '/api/restart');
-      this.showToast('容器重启中，10 秒后刷新页面');
-      setTimeout(() => location.reload(), 12000);
-    },
-
-    // 修改密码
+    // ====== 密码 ======
     async changePassword() {
-      if (!this.pw.old || !this.pw.new || !this.pw.confirm) {
-        this.showToast('请填完三个密码字段', 'err');
-        return;
-      }
-      if (this.pw.new !== this.pw.confirm) {
-        this.showToast('新密码两次输入不一致', 'err');
-        return;
-      }
-      if (this.pw.new.length < 4) {
-        this.showToast('新密码至少 4 位', 'err');
-        return;
-      }
+      if(!this.pw.old||!this.pw.new||!this.pw.confirm){this.showToast('请填完三个字段','err');return;}
+      if(this.pw.new!==this.pw.confirm){this.showToast('两次密码不一致','err');return;}
+      if(this.pw.new.length<4){this.showToast('新密码至少4位','err');return;}
+      try{await this.api('PUT','/api/password',{old_password:this.pw.old,new_password:this.pw.new});this.showToast('已修改，3秒后跳转登录');setTimeout(()=>{window.location.href='/login';},3000);}catch(e){}
+    },
+    async logout() { try{await fetch('/api/logout',{method:'POST'});}catch(e){} window.location.href='/login'; },
+
+    // ====== 🤖 Bot 配置 ======
+    async loadBot() {
+      try { const r = await this.api('GET','/api/bot'); this.botCfg = { token:'', enabled:r.enabled!==false, token_preview:r.token_preview||'', has_token:r.has_token, bot_username:r.bot_username||'', chat_id:r.chat_id||'' }; } catch(e) {}
+    },
+    async saveBot() {
+      if (!this.botCfg.token.trim()) { this.showToast('请输入 Bot Token','err'); return; }
+      this.botSaving = true;
       try {
-        await this.api('PUT', '/api/password', {
-          old_password: this.pw.old,
-          new_password: this.pw.new,
-        });
-        this.pw = { old:'', new:'', confirm:'' };
-        this.showToast('密码已修改，3 秒后刷新页面重新登录');
-        // 清掉浏览器 Basic Auth 缓存：跳转一个会 401 的请求再刷新
-        setTimeout(() => {
-          // 用一个假账号访问让浏览器丢弃旧凭据
-          fetch('/api/config', { headers: { Authorization: 'Basic ' + btoa('logout:logout') }})
-            .finally(() => location.reload());
-        }, 3000);
-      } catch (e) { /* api() 已 toast */ }
+        const r = await this.api('PUT','/api/bot',{bot_token:this.botCfg.token.trim(),enabled:this.botCfg.enabled});
+        this.showToast(r.msg||'已保存');
+        this.botCfg.token = '';
+        await this.loadBot();
+      } catch(e) {}
+      this.botSaving = false;
+    },
+    async testBot() {
+      this.botTesting = true; this.botTestResult = null;
+      try { this.botTestResult = await this.api('POST','/api/bot/test'); } catch(e) { this.botTestResult = {ok:false, error:e.message}; }
+      this.botTesting = false;
     },
 
-    // 扫描
-    async triggerScan() {
-      this.scanning = true;
-      try {
-        await this.api('POST', '/api/scan');
-        this.showToast('扫描已触发，切换到「日志」查看进度');
-        this.tab = 'logs';
-        this.autoRefresh = true;
-        this.loadLog();
-      } finally {
-        setTimeout(() => this.scanning = false, 3000);
-      }
+    // ====== 代理 ======
+    async loadProxy() {
+      try { const r = await this.api('GET','/api/proxy'); this.proxyCfg={url:r.url||'',enabled:r.enabled!==false,source:r.source||'',env_tg_proxy:r.env_tg_proxy||'',env_forward_proxy:r.env_forward_proxy||''}; this.proxyPresets=r.presets||[]; } catch(e) {}
     },
+    async saveProxy() { this.proxySaving=true; try{const r=await this.api('PUT','/api/proxy',{url:this.proxyCfg.url,enabled:this.proxyCfg.enabled,source:this.proxyCfg.source||'custom'});this.showToast(r.msg||'已保存');}catch(e){} this.proxySaving=false; },
+    async testProxy() { this.proxyTesting=true; this.proxyTestResult=null; try{this.proxyTestResult=await this.api('POST','/api/proxy/test',{url:this.proxyCfg.url});}catch(e){this.proxyTestResult={ok:false,error:e.message};} this.proxyTesting=false; },
+
+    // ====== 扫描 ======
+    async triggerScan() { this.scanning=true; try{await this.api('POST','/api/scan');this.showToast('扫描已触发，查看日志进度');this.tab='logs';this.autoRefresh=true;this.loadLog();}finally{setTimeout(()=>this.scanning=false,3000);} },
   };
 }
 </script>

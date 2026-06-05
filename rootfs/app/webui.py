@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # IPA Self-Host WebUI backend (Flask)
-# Config CRUD + IPA file mgmt + scan trigger + log streaming
-import os, json, shutil, subprocess, time, base64, hashlib
-from datetime import datetime
+# Cookie 登录 + App 卡片首页 + 删除访问控制 tab
+import os, json, shutil, subprocess, time, hashlib, secrets
+from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
-from flask import Flask, request, jsonify, send_from_directory, Response, abort
+from urllib.parse import urlparse
+from flask import Flask, request, jsonify, send_from_directory, Response, abort, make_response, redirect
 
 CONFIG_PATH = Path("/config/config.json")
 STATE_PATH = Path("/config/state.json")
@@ -18,9 +19,13 @@ STATIC_DIR = Path(__file__).parent / "webui_static"
 
 UI_USER = os.environ.get("WEBUI_USER", "admin")
 # 密码来源优先级：/config/webui_pass.json > env > 默认 "admin"
-# 这样进 UI 改完密码会持久化，env 只作为初始值
 PASS_PATH = Path("/config/webui_pass.json")
 _ENV_PASS = os.environ.get("WEBUI" + "_" + "PASS" + "WORD", "admin")
+
+# Session 存储：{session_id: {"user": str, "expires": float}}
+# 生产环境可用 Redis/文件持久化，这里用内存简单实现（容器重启需重新登录）
+_sessions = {}
+SESSION_MAX_AGE = 86400 * 7  # 7 天
 
 def _read_password():
     if PASS_PATH.exists():
@@ -34,6 +39,22 @@ def _write_password(new_pass):
     PASS_PATH.parent.mkdir(parents=True, exist_ok=True)
     PASS_PATH.write_text(json.dumps({"password": new_pass}, ensure_ascii=False))
 
+def _create_session(username):
+    sid = secrets.token_urlsafe(32)
+    _sessions[sid] = {"user": username, "expires": time.time() + SESSION_MAX_AGE}
+    return sid
+
+def _valid_session(sid):
+    s = _sessions.get(sid)
+    if not s:
+        return False
+    if s["expires"] < time.time():
+        _sessions.pop(sid, None)
+        return False
+    return True
+
+def _clear_sessions():
+    _sessions.clear()
 
 app = Flask(__name__, static_folder=None)
 
@@ -44,12 +65,10 @@ def load_config():
     return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
 def save_config(cfg):
-    # 备份原文件
     if CONFIG_PATH.exists():
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         bak = CONFIG_PATH.with_suffix(f".json.bak-{ts}")
         shutil.copy2(CONFIG_PATH, bak)
-        # 只保留最近 10 个备份
         baks = sorted(CONFIG_PATH.parent.glob("config.json.bak-*"))
         for old in baks[:-10]:
             old.unlink()
@@ -64,39 +83,66 @@ def load_state():
 
 def save_state(state):
     STATE_PATH.write_text(
-        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(state, ensure_ascii=False, indent=2)
     )
 
-def repo_path_from_url(url):
-    """从 REPO_BASE_URL 提取末段路径（解锁码）"""
-    u = (url or "").rstrip("/")
-    if not u:
-        return "repo"
-    parts = [p for p in u.split("/") if p and "//" not in p]
-    return parts[-1] if parts else "repo"
-
-# ============ Basic Auth ============
+# ============ 认证：Cookie 优先，Basic Auth 兼容 ============
 def check_auth():
+    """优先检查 Cookie session，其次 Basic Auth（兼容 curl 排障）"""
+    # 1. Cookie
+    sid = request.cookies.get("session_id")
+    if sid and _valid_session(sid):
+        return True
+    # 2. Basic Auth（curl -u admin:admin 兼容）
     a = request.authorization
-    return a and a.username == UI_USER and a.password == _read_password()
+    if a and a.username == UI_USER and a.password == _read_password():
+        return True
+    return False
 
 def require_auth(f):
     @wraps(f)
     def wrapper(*a, **k):
         if not check_auth():
-            return Response(
-                "Auth required", 401,
-                {"WWW-Authenticate": 'Basic realm="ipa-self-host"'}
-            )
+            # API 请求返回 JSON 401，不带 WWW-Authenticate（避免浏览器弹框）
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "未登录"}), 401
+            # 页面请求跳转登录
+            return redirect("/login")
         return f(*a, **k)
     return wrapper
+
+# ============ 登录/登出 ============
+@app.route("/login", methods=["GET"])
+def login_page():
+    return send_from_directory(STATIC_DIR, "login.html")
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.get_json(force=True) or {}
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+    if username != UI_USER or password != _read_password():
+        return jsonify({"error": "用户名或密码错误"}), 401
+    sid = _create_session(username)
+    resp = make_response(jsonify({"ok": True}))
+    resp.set_cookie("session_id", sid, max_age=SESSION_MAX_AGE,
+                    httponly=True, samesite="Lax")
+    return resp
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    sid = request.cookies.get("session_id")
+    if sid:
+        _sessions.pop(sid, None)
+    resp = make_response(jsonify({"ok": True}))
+    resp.delete_cookie("session_id")
+    return resp
 
 # ============ API: 配置 ============
 @app.route("/api/config", methods=["GET"])
 @require_auth
 def api_get_config():
     cfg = load_config()
-    # 脱敏：不返回 api_id/api_hash/phone
     safe = {
         "groups": cfg.get("groups", []),
         "priority_groups": cfg.get("priority_groups", []),
@@ -151,7 +197,6 @@ def api_toggle_priority():
 @app.route("/api/whitelist", methods=["POST"])
 @require_auth
 def api_add_app():
-    """新增 App 或给已有 App 加关键词"""
     data = request.get_json(force=True) or {}
     name = (data.get("name") or "").strip()
     keywords = data.get("keywords") or []
@@ -163,7 +208,6 @@ def api_add_app():
     cfg.setdefault("whitelist", [])
     existing = [w for w in cfg["whitelist"] if w["name"] == name]
     if existing:
-        # 合并去重
         kws = existing[0].setdefault("keywords", [])
         for k in keywords:
             if k not in kws:
@@ -176,7 +220,6 @@ def api_add_app():
 @app.route("/api/whitelist", methods=["PUT"])
 @require_auth
 def api_update_app():
-    """整体替换某 App 的关键词列表"""
     data = request.get_json(force=True) or {}
     name = (data.get("name") or "").strip()
     keywords = data.get("keywords")
@@ -229,7 +272,7 @@ def api_set_rate():
 @app.route("/api/ipa", methods=["GET"])
 @require_auth
 def api_list_ipa():
-    """列出所有 IPA 文件。从 scanner 缓存 + 文件系统读取元信息"""
+    """列出所有 IPA 文件。从 scanner 缓存 + 文件系统读取元信息，按 App 分组"""
     cache_path = Path("/data/.scan_cache.json")
     meta_by_name = {}
     if cache_path.exists():
@@ -267,13 +310,11 @@ def api_list_ipa():
 @app.route("/api/ipa", methods=["DELETE"])
 @require_auth
 def api_del_ipa():
-    """删 IPA + 对应 icon + 从 state 移除版本记录"""
     data = request.get_json(force=True) or {}
     filenames = data.get("filenames") or []
     if not isinstance(filenames, list) or not filenames:
         return jsonify({"error": "filenames[] 必填"}), 400
     deleted, errors = [], []
-    # 加载 scan_cache 找到对应 icon
     cache_path = Path("/data/.scan_cache.json")
     cache = {}
     if cache_path.exists():
@@ -281,7 +322,6 @@ def api_del_ipa():
         except: pass
     state = load_state()
     for fname in filenames:
-        # 安全检查：不允许路径穿越
         if "/" in fname or ".." in fname or not fname.endswith(".ipa"):
             errors.append(f"{fname}: 非法文件名")
             continue
@@ -291,15 +331,12 @@ def api_del_ipa():
             continue
         try:
             ipa_path.unlink()
-            # 删 icon
             icon_name = (cache.get(fname, {}).get("meta") or {}).get("icon_filename")
             if icon_name:
                 icon_path = ICONS_DIR / icon_name
                 if icon_path.exists():
                     icon_path.unlink()
-            # 从 state 的 downloaded_versions 清掉对应 version_key（让它能重新下）
             dv = state.get("downloaded_versions", {})
-            # version_key 形如 "AppName_1.2.3"，只能模糊匹配；保守做法是删能在文件名找到的
             for vk in list(dv.keys()):
                 if vk and (vk in fname or fname.startswith(vk)):
                     del dv[vk]
@@ -307,7 +344,6 @@ def api_del_ipa():
         except Exception as e:
             errors.append(f"{fname}: {e}")
     save_state(state)
-    # 触发 scanner 重建 repo.json
     try:
         subprocess.run(["/usr/bin/python3", SCANNER_SCRIPT], timeout=60, capture_output=True)
     except Exception:
@@ -318,7 +354,6 @@ def api_del_ipa():
 @app.route("/api/scan", methods=["POST"])
 @require_auth
 def api_scan():
-    """非阻塞触发一次 TG 扫描"""
     try:
         subprocess.Popen([SCAN_SCRIPT], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return jsonify({"ok": True, "msg": "扫描已触发，看日志查看进度"})
@@ -328,7 +363,6 @@ def api_scan():
 @app.route("/api/logs/<name>", methods=["GET"])
 @require_auth
 def api_get_log(name):
-    """读取日志最后 N 行。name ∈ {tg-cron, scanner, nginx-error}"""
     allow = {"tg-cron": "tg-cron.log", "scanner": "scanner.log",
              "nginx-error": "nginx-error.log"}
     if name not in allow:
@@ -345,11 +379,10 @@ def api_get_log(name):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ============ API: 解锁码 ============
+# ============ API: 解锁码（保留后端逻辑供 nginx/订阅用，只删前端 tab） ============
 @app.route("/api/unlock", methods=["GET"])
 @require_auth
 def api_get_unlock():
-    """读取当前订阅源配置（从 /config/unlock.json）"""
     p = Path("/config/unlock.json")
     conf = {}
     if p.exists():
@@ -357,11 +390,9 @@ def api_get_unlock():
             conf = json.loads(p.read_text())
         except Exception:
             pass
-    # 默认值
     code = conf.get("code") or "142536"
     enabled = conf.get("enabled", True)
     token = str(conf.get("token") or "").strip()
-    # token 只返回前后4字符，防泄露
     token_preview = f"{token[:4]}...{token[-4:]}" if len(token) > 8 else "(未设置)"
     return jsonify({
         "enabled": enabled,
@@ -373,9 +404,6 @@ def api_get_unlock():
 @app.route("/api/unlock", methods=["DELETE"])
 @require_auth
 def api_regenerate_token():
-    """重新生成服务端访问 token。旧 token 立即失效，重启后生效。
-    ⚠️ 重新生成后所有已分享的订阅链接需要更新！
-    """
     p = Path("/config/unlock.json")
     conf = {}
     if p.exists():
@@ -383,8 +411,7 @@ def api_regenerate_token():
             conf = json.loads(p.read_text())
         except Exception:
             conf = {}
-    import secrets as _secrets
-    new_token = _secrets.token_urlsafe(24)
+    new_token = secrets.token_urlsafe(24)
     conf["token"] = new_token
     p.write_text(json.dumps(conf, ensure_ascii=False, indent=2))
     return jsonify({"ok": True, "msg": "Token 已重新生成。需要重启容器生效，且所有订阅链接需要更新。", "token_preview": f"{new_token[:4]}...{new_token[-4:]}"})
@@ -392,7 +419,6 @@ def api_regenerate_token():
 @app.route("/api/unlock", methods=["PUT"])
 @require_auth
 def api_set_unlock():
-    """修改订阅路径 / 开关。改完需要重启容器才能让 nginx 生效。"""
     data = request.get_json(force=True) or {}
     enabled = bool(data.get("enabled", True))
     code = (data.get("code") or "").strip()
@@ -400,8 +426,6 @@ def api_set_unlock():
         if not code or not code.isalnum() or len(code) < 4 or len(code) > 32:
             return jsonify({"error": "code 必须 4-32 位字母数字"}), 400
     p = Path("/config/unlock.json")
-    # 保留服务端访问 token：它是完整订阅 URL 的私密凭证。
-    # 只改 code/enabled 时不能把 token 抹掉，否则下次重启会生成新 token，旧源链接立即失效。
     old_conf = {}
     if p.exists():
         try:
@@ -415,10 +439,6 @@ def api_set_unlock():
 
 @app.route("/auth", methods=["GET", "POST"])
 def esign_unlock_auth():
-    """Esign/轻松签解锁接口：验证 code，返回 md5(news.key + udid)。
-
-    说明：这只控制客户端“解锁/下载”按钮；真正的源和 IPA 防外传仍由 nginx token URL 校验。
-    """
     conf_path = Path("/config/unlock.json")
     conf = {}
     if conf_path.exists():
@@ -441,20 +461,232 @@ def esign_unlock_auth():
 @app.route("/api/password", methods=["PUT"])
 @require_auth
 def api_set_password():
-    """改 WebUI 登录密码。必须先用旧密码通过 Basic Auth，再 body 给新密码"""
     data = request.get_json(force=True) or {}
     old_pw = (data.get("old_password") or "").strip()
     new_pw = (data.get("new_password") or "").strip()
-    # 二次校验旧密码（Basic Auth 已过，但避免别人趁登录会话改密码）
     if old_pw != _read_password():
         return jsonify({"error": "旧密码不正确"}), 403
-    # 校验新密码强度
     if len(new_pw) < 4 or len(new_pw) > 64:
         return jsonify({"error": "新密码必须 4-64 位"}), 400
     if new_pw == old_pw:
         return jsonify({"error": "新密码不能与旧密码相同"}), 400
     _write_password(new_pw)
-    return jsonify({"ok": True, "msg": "密码已修改。下次访问需用新密码登录。"})
+    # 改密码后清所有 session，强制重新登录
+    _clear_sessions()
+    return jsonify({"ok": True, "msg": "密码已修改，请重新登录。"})
+
+
+
+# ============ API: 网络代理 ============
+PROXY_PATH = Path("/config/proxy.json")
+
+# 预设代理列表（Hoya 家里的真实可用代理）
+PROXY_PRESETS = [
+    {"name": "旁网关 (10.0.0.2)", "url": "http://10.0.0.2:7893", "desc": "Clash 混合端口，支持 http/https/socks5"},
+]
+
+def _load_proxy_config():
+    """加载代理配置"""
+    if PROXY_PATH.exists():
+        try:
+            return json.loads(PROXY_PATH.read_text())
+        except Exception:
+            pass
+    return {"url": "", "enabled": True, "source": ""}
+
+def _save_proxy_config(cfg):
+    """保存代理配置"""
+    PROXY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PROXY_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2))
+
+@app.route("/api/proxy", methods=["GET"])
+@require_auth
+def api_get_proxy():
+    """获取代理配置 + 预设列表"""
+    cfg = _load_proxy_config()
+    # 脱敏：不暴露完整 URL 中的密码部分（如果有的话）
+    safe_url = cfg.get("url", "")
+    return jsonify({
+        "url": safe_url,
+        "enabled": cfg.get("enabled", True),
+        "source": cfg.get("source", ""),
+        "presets": PROXY_PRESETS,
+        "env_tg_proxy": os.environ.get("TG_PROXY", ""),
+        "env_forward_proxy": os.environ.get("FORWARD_BOT_PROXY", ""),
+    })
+
+@app.route("/api/proxy", methods=["PUT"])
+@require_auth
+def api_set_proxy():
+    """保存代理配置"""
+    data = request.get_json(force=True) or {}
+    url = (data.get("url") or "").strip()
+    enabled = bool(data.get("enabled", True))
+    source = (data.get("source") or "").strip()  # "preset" or "custom"
+
+    if url:
+        # 基本校验格式
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.hostname:
+            return jsonify({"error": "代理格式错误，示例: socks5://10.0.0.100:7893"}), 400
+        if parsed.scheme.lower() not in ("socks5", "socks5h", "http", "https"):
+            return jsonify({"error": "仅支持 socks5/http/https 协议"}), 400
+
+    cfg = {"url": url, "enabled": enabled, "source": source}
+    _save_proxy_config(cfg)
+
+    # 同步更新 tg_bot 的环境变量（需要重启容器才能让 tg_bot 的 cron 生效）
+    # 但 forward_bot 会实时读取 /config/proxy.json，所以立即生效
+    return jsonify({"ok": True, "msg": "代理已保存。转发 Bot 会立即使用新代理；定时扫描需重启容器生效。"})
+
+@app.route("/api/proxy/test", methods=["POST"])
+@require_auth
+def api_test_proxy():
+    """测试代理是否可用：通过代理访问 Telegram API"""
+    data = request.get_json(force=True) or {}
+    url = (data.get("url") or "").strip()
+
+    if not url:
+        # 如果没给 URL，用当前保存的配置
+        cfg = _load_proxy_config()
+        url = cfg.get("url", "")
+        if not url:
+            return jsonify({"ok": False, "error": "未设置代理地址"}), 400
+
+    # 校验格式
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.hostname:
+        return jsonify({"ok": False, "error": "代理格式错误"}), 400
+
+    try:
+        import httpx
+        # 测试1: 通过代理访问 Telegram API（验证代理是否能连 TG）
+        start = time.time()
+        try:
+            with httpx.Client(proxy=url, timeout=10) as c:
+                r = c.get("https://api.telegram.org/")
+                tg_time = round((time.time() - start) * 1000)
+                tg_ok = r.status_code < 500
+        except Exception as e:
+            tg_time = None
+            tg_ok = False
+            tg_err = str(e)[:100]
+
+        # 测试2: 通过代理访问 Google（验证代理是否真正出墙）
+        start2 = time.time()
+        try:
+            with httpx.Client(proxy=url, timeout=10) as c:
+                r2 = c.get("https://www.google.com/generate_204")
+                gw_time = round((time.time() - start2) * 1000)
+                gw_ok = r2.status_code == 204
+        except Exception:
+            gw_time = None
+            gw_ok = False
+
+        # 测试3: 直连 Telegram（不需要代理也能访问？）
+        start3 = time.time()
+        try:
+            with httpx.Client(timeout=10) as c:
+                r3 = c.get("https://api.telegram.org/")
+                direct_time = round((time.time() - start3) * 1000)
+                direct_ok = r3.status_code < 500
+        except Exception:
+            direct_time = None
+            direct_ok = False
+
+        result = {
+            "ok": tg_ok,
+            "proxy_url": url,
+            "tests": {
+                "telegram_via_proxy": {"ok": tg_ok, "latency_ms": tg_time} if tg_time else {"ok": False, "error": tg_err},
+                "google_via_proxy": {"ok": gw_ok, "latency_ms": gw_time} if gw_time else {"ok": False},
+                "telegram_direct": {"ok": direct_ok, "latency_ms": direct_time} if direct_time else {"ok": False},
+            }
+        }
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]}), 500
+
+
+# ============ API: Telegram Bot 配置 ============
+@app.route("/api/bot", methods=["GET"])
+@require_auth
+def api_get_bot():
+    """获取 Bot 配置（token 脱敏）"""
+    cfg = load_config()
+    notify = cfg.get("telegram_notify", {})
+    token = str(notify.get("bot_token") or "").strip()
+    token_preview = ""
+    if token:
+        token_preview = f"{token[:6]}...{token[-4:]}" if len(token) > 12 else "***"
+    return jsonify({
+        "enabled": notify.get("enabled", False),
+        "token_preview": token_preview,
+        "has_token": bool(token),
+        "chat_id": notify.get("chat_id"),
+        "bot_username": notify.get("bot_username", ""),
+    })
+
+@app.route("/api/bot", methods=["PUT"])
+@require_auth
+def api_set_bot():
+    """保存 Bot Token"""
+    data = request.get_json(force=True) or {}
+    token = (data.get("bot_token") or "").strip()
+    chat_id = data.get("chat_id")
+    enabled = bool(data.get("enabled", True))
+
+    if enabled and not token:
+        return jsonify({"error": "Bot Token 不能为空"}), 400
+
+    cfg = load_config()
+    notify = cfg.setdefault("telegram_notify", {})
+    old_token = str(notify.get("bot_token") or "").strip()
+
+    # 如果给了新 token，先验证再保存
+    if token and token != old_token:
+        try:
+            import httpx
+            r = httpx.get(f"https://api.telegram.org/bot{token}/getMe",
+                          timeout=10)
+            if r.status_code == 200 and r.json().get("ok"):
+                notify["bot_username"] = r.json()["result"]["username"]
+                notify["bot_token"] = token
+                notify["enabled"] = enabled
+                if chat_id is not None:
+                    notify["chat_id"] = chat_id
+                save_config(cfg)
+                return jsonify({"ok": True, "msg": f"Bot @{notify['bot_username']} 已保存"})
+            else:
+                return jsonify({"error": f"Token 无效: {r.json().get('description', r.text)[:100]}"}), 400
+        except Exception as e:
+            return jsonify({"error": f"验证失败: {str(e)[:100]}"}), 500
+    else:
+        # 不修改 token，只更新其他字段
+        notify["enabled"] = enabled
+        if chat_id is not None:
+            notify["chat_id"] = chat_id
+        save_config(cfg)
+        return jsonify({"ok": True, "msg": "已保存"})
+
+@app.route("/api/bot/test", methods=["POST"])
+@require_auth
+def api_test_bot():
+    """测试已保存的 Bot Token"""
+    cfg = load_config()
+    token = str((cfg.get("telegram_notify") or {}).get("bot_token") or "").strip()
+    if not token:
+        return jsonify({"ok": False, "error": "未配置 Bot Token"}), 400
+    try:
+        import httpx
+        r = httpx.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
+        if r.status_code == 200 and r.json().get("ok"):
+            info = r.json()["result"]
+            return jsonify({"ok": True, "bot": {"username": info["username"], "name": info["first_name"], "id": info["id"]}})
+        return jsonify({"ok": False, "error": f"Token 无效: {r.json().get('description', r.text)[:100]}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:100]}), 500
+
 
 # ============ API: 状态 + 重启 ============
 @app.route("/api/status", methods=["GET"])
@@ -471,10 +703,9 @@ def api_status():
 @app.route("/api/restart", methods=["POST"])
 @require_auth
 def api_restart():
-    """触发容器自身退出，让 docker --restart=unless-stopped 拉起"""
     def _exit():
         time.sleep(1)
-        os.kill(1, 15)  # SIGTERM to PID 1
+        os.kill(1, 15)
     import threading
     threading.Thread(target=_exit, daemon=True).start()
     return jsonify({"ok": True, "msg": "容器将在 1 秒后重启，请稍候 5-10 秒刷新页面"})
@@ -489,6 +720,12 @@ def index():
 @require_auth
 def static_files(p):
     return send_from_directory(STATIC_DIR, p)
+
+@app.route("/static/icons/<path:p>")
+@require_auth
+def icon_files(p):
+    """App 图标存放在 /data/icons/ 卷挂载目录"""
+    return send_from_directory(ICONS_DIR, p)
 
 if __name__ == "__main__":
     port = int(os.environ.get("WEBUI_PORT", "8085"))

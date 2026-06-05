@@ -10,7 +10,7 @@ IPA仓库自动扫描器（AltStore/Esign兼容格式）
   REPO_PATH      - URL路径部分（默认从BASE_URL提取）
 """
 
-import os, sys, json, zipfile, plistlib, shutil
+import os, sys, json, zipfile, plistlib, shutil, struct, zlib, io, binascii
 from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse, quote
@@ -92,7 +92,57 @@ def find_app_dir_in_ipa(zf):
             return parts[1]
     return None
 
+
+
+def _cgbi_to_png(data: bytes) -> bytes:
+    """Convert Apple CgBI PNG bytes to standard PNG bytes.
+    CgBI stores IDAT chunks as raw deflate (no zlib wrapper).
+    Non-CgBI data is returned unchanged (identity check safe)."""
+    PNG_SIG = bytes([137, 80, 78, 71, 13, 10, 26, 10])  # PNG signature bytes
+    if data[:8] != PNG_SIG or b'CgBI' not in data[:100]:
+        return data
+    
+    pos = 8
+    chunks = []
+    while pos < len(data):
+        length = struct.unpack('>I', data[pos:pos + 4])[0]
+        ctype = data[pos + 4:pos + 8]
+        cdata = data[pos + 8:pos + 8 + length]
+        pos += 12 + length
+        chunks.append((ctype, cdata))
+    
+    out = io.BytesIO()
+    out.write(PNG_SIG)
+    for ctype, cdata in chunks:
+        if ctype == b'CgBI':
+            continue
+        if ctype == b'IDAT':
+            try:
+                cdata = zlib.compress(zlib.decompress(cdata, -15))
+            except Exception:
+                pass
+        out.write(struct.pack('>I', len(cdata)))
+        out.write(ctype)
+        out.write(cdata)
+        out.write(struct.pack('>I', binascii.crc32(ctype + cdata) & 0xffffffff))
+    return out.getvalue()
+
+
+def _normalize_png(path):
+    """Normalize PNG icon to standard format.
+    Standard PNGs pass through, CgBI PNGs converted in-place."""
+    try:
+        raw = open(path, 'rb').read()
+        converted = _cgbi_to_png(raw)
+        if converted is not raw:
+            open(path, 'wb').write(converted)
+        return True
+    except Exception:
+        os.remove(path)
+        return False
+
 def extract_largest_icon(zf, app_dir, plist, out_path):
+    """Extract best app icon from IPA. All PNGs accepted - CgBI auto-converted."""
     declared_names = set()
     icons_dict = plist.get("CFBundleIcons") or {}
     primary = icons_dict.get("CFBundlePrimaryIcon") or {}
@@ -131,11 +181,16 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
 
     if not candidates: return False
     candidates.sort()
-    _, _, icon_name = candidates[0]
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with zf.open(icon_name) as src, open(out_path, "wb") as dst:
-        shutil.copyfileobj(src, dst)
-    return True
+    
+    for _, _, icon_name in candidates:
+        with zf.open(icon_name) as src, open(out_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        if _normalize_png(out_path):
+            return True
+        out_path.unlink(missing_ok=True)
+    
+    return False
 
 def parse_ipa(ipa_path: Path):
     try:
