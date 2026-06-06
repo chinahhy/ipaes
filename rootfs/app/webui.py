@@ -723,6 +723,12 @@ def static_files(p):
         return send_from_directory(ICONS_DIR, p.removeprefix("icons/"))
     return send_from_directory(STATIC_DIR, p)
 
+@app.route("/icons/<path:p>")
+@require_auth
+def webui_icon_files(p):
+    """WebUI 使用的原生 App 图标代理，文件来自 /data/icons。"""
+    return send_from_directory(ICONS_DIR, p)
+
 @app.route("/static/icons/<path:p>")
 @require_auth
 def icon_files(p):

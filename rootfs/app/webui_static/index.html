@@ -335,6 +335,10 @@
     height:100%;
     object-fit:cover;
   }
+  .app-icon.missing {
+    background:transparent;
+    border-style:dashed;
+  }
   .app-info { min-width:0 }
   .app-info h3 {
     margin:0;
@@ -771,8 +775,10 @@
           <template x-for="app in filteredApps()" :key="app.name">
             <article class="app-row">
               <button type="button" class="app-main" @click="app.expanded = !app.expanded">
-                <div class="app-icon">
-                  <img :src="appIconSrc(app)" @error="handleIconError($event, app)" alt="">
+                <div class="app-icon" :class="{missing: !appIconSrc(app)}">
+                  <template x-if="appIconSrc(app)">
+                    <img :src="appIconSrc(app)" @error="handleIconError($event, app)" alt="">
+                  </template>
                 </div>
                 <div class="app-info">
                   <h3 x-text="app.name"></h3>
@@ -1078,12 +1084,6 @@ function describeApp(name) {
   return 'iOS 应用安装包。';
 }
 
-function fallbackAppIcon(name) {
-  const lower = String(name || '').toLowerCase();
-  if (lower.includes('pili')) return '/static/app-icons/piliplus.svg';
-  return '/static/app-icons/default.svg';
-}
-
 function normalizeThemeMode(mode) {
   return ['dark', 'light', 'auto'].includes(mode) ? mode : 'dark';
 }
@@ -1191,18 +1191,12 @@ function ipaApp() {
     },
 
     appIconSrc(app) {
-      if (app.icon && !app.iconFailed) return '/static/icons/' + encodeURIComponent(app.icon);
-      return fallbackAppIcon(app.name);
+      if (app.icon && !app.iconFailed) return '/icons/' + encodeURIComponent(app.icon);
+      return '';
     },
 
-    handleIconError(event, app) {
-      if (!app.iconFailed) {
-        app.iconFailed = true;
-        event.target.src = fallbackAppIcon(app.name);
-        return;
-      }
-      event.target.onerror = null;
-      event.target.src = '/static/app-icons/default.svg';
+    handleIconError(_event, app) {
+      app.iconFailed = true;
     },
 
     filteredApps() {

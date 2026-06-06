@@ -66,6 +66,7 @@ IPA_DIR = DATA_DIR / "ipa"
 ICONS_DIR = DATA_DIR / "icons"
 REPO_JSON = DATA_DIR / "repo.json"
 CACHE_DB = DATA_DIR / ".scan_cache.json"
+ICON_EXTRACTOR_VERSION = "cgbi-v2"
 # ================
 
 def load_cache():
@@ -94,37 +95,211 @@ def find_app_dir_in_ipa(zf):
 
 
 
-def _cgbi_to_png(data: bytes) -> bytes:
-    """Convert Apple CgBI PNG bytes to standard PNG bytes.
-    CgBI stores IDAT chunks as raw deflate (no zlib wrapper).
-    Non-CgBI data is returned unchanged (identity check safe)."""
-    PNG_SIG = bytes([137, 80, 78, 71, 13, 10, 26, 10])  # PNG signature bytes
-    if data[:8] != PNG_SIG or b'CgBI' not in data[:100]:
-        return data
-    
+PNG_SIG = bytes([137, 80, 78, 71, 13, 10, 26, 10])
+
+
+def _png_chunk(ctype: bytes, cdata: bytes) -> bytes:
+    return (
+        struct.pack('>I', len(cdata)) +
+        ctype +
+        cdata +
+        struct.pack('>I', binascii.crc32(ctype + cdata) & 0xffffffff)
+    )
+
+
+def _png_chunks(data: bytes):
+    if data[:8] != PNG_SIG:
+        raise ValueError("not a PNG")
     pos = 8
-    chunks = []
-    while pos < len(data):
+    while pos + 12 <= len(data):
         length = struct.unpack('>I', data[pos:pos + 4])[0]
         ctype = data[pos + 4:pos + 8]
-        cdata = data[pos + 8:pos + 8 + length]
-        pos += 12 + length
-        chunks.append((ctype, cdata))
-    
-    out = io.BytesIO()
-    out.write(PNG_SIG)
-    for ctype, cdata in chunks:
+        end = pos + 8 + length
+        if end + 4 > len(data):
+            raise ValueError("truncated PNG chunk")
+        cdata = data[pos + 8:end]
+        yield ctype, cdata
+        pos = end + 4
+        if ctype == b'IEND':
+            return
+    raise ValueError("PNG missing IEND")
+
+
+def _bytes_per_pixel(color_type: int, bit_depth: int) -> int:
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
+    if channels is None:
+        raise ValueError("unsupported PNG color type")
+    return max(1, (channels * bit_depth + 7) // 8)
+
+
+def _row_bytes(width: int, color_type: int, bit_depth: int) -> int:
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
+    if channels is None:
+        raise ValueError("unsupported PNG color type")
+    return (width * channels * bit_depth + 7) // 8
+
+
+def _paeth(a: int, b: int, c: int) -> int:
+    p = a + b - c
+    pa = abs(p - a)
+    pb = abs(p - b)
+    pc = abs(p - c)
+    if pa <= pb and pa <= pc:
+        return a
+    if pb <= pc:
+        return b
+    return c
+
+
+def _unfilter_png_rows(raw: bytes, width: int, height: int, color_type: int, bit_depth: int) -> list[bytearray]:
+    bpp = _bytes_per_pixel(color_type, bit_depth)
+    row_len = _row_bytes(width, color_type, bit_depth)
+    expected = height * (row_len + 1)
+    if len(raw) != expected:
+        raise ValueError("unexpected PNG scanline length")
+
+    rows = []
+    prev = bytearray(row_len)
+    pos = 0
+    for _ in range(height):
+        filter_type = raw[pos]
+        pos += 1
+        src = raw[pos:pos + row_len]
+        pos += row_len
+        row = bytearray(row_len)
+
+        if filter_type == 0:
+            row[:] = src
+        elif filter_type == 1:
+            for i, value in enumerate(src):
+                left = row[i - bpp] if i >= bpp else 0
+                row[i] = (value + left) & 0xff
+        elif filter_type == 2:
+            for i, value in enumerate(src):
+                row[i] = (value + prev[i]) & 0xff
+        elif filter_type == 3:
+            for i, value in enumerate(src):
+                left = row[i - bpp] if i >= bpp else 0
+                up = prev[i]
+                row[i] = (value + ((left + up) // 2)) & 0xff
+        elif filter_type == 4:
+            for i, value in enumerate(src):
+                left = row[i - bpp] if i >= bpp else 0
+                up = prev[i]
+                up_left = prev[i - bpp] if i >= bpp else 0
+                row[i] = (value + _paeth(left, up, up_left)) & 0xff
+        else:
+            raise ValueError("unknown PNG filter")
+
+        rows.append(row)
+        prev = row
+    return rows
+
+
+def _encode_unfiltered_rows(rows: list[bytearray]) -> bytes:
+    out = bytearray()
+    for row in rows:
+        out.append(0)
+        out.extend(row)
+    return bytes(out)
+
+
+def _standard_png_ok(data: bytes) -> bool:
+    try:
+        chunks = list(_png_chunks(data))
+        if any(ctype == b'CgBI' for ctype, _ in chunks):
+            return False
+        ihdr = next(cdata for ctype, cdata in chunks if ctype == b'IHDR')
+        width, height = struct.unpack('>II', ihdr[:8])
+        bit_depth = ihdr[8]
+        color_type = ihdr[9]
+        interlace = ihdr[12]
+        idat = b''.join(cdata for ctype, cdata in chunks if ctype == b'IDAT')
+        raw = zlib.decompress(idat)
+        if interlace:
+            return bool(raw)
+        row_len = _row_bytes(width, color_type, bit_depth)
+        return len(raw) == height * (row_len + 1)
+    except Exception:
+        return False
+
+
+def _cgbi_to_png(data: bytes) -> bytes:
+    """Convert Apple CgBI PNG bytes to standard PNG bytes.
+    CgBI stores IDAT as raw deflate (no zlib wrapper) with BGR/BGRA pixel order.
+    We decompress raw deflate, swap B<->R channels for color types 2 & 6,
+    recompress with standard zlib, and remove the CgBI chunk.
+    Non-CgBI data is returned unchanged (identity check safe)."""
+    if data[:8] != PNG_SIG:
+        return data
+    # Precise: CgBI replaces the normal IHDR chunk position at bytes 12-15
+    if data[12:16] != b'CgBI':
+        return data
+
+    ihdr = None
+    idat_parts = bytearray()
+    other_chunks = []  # (ctype, cdata) in original order
+
+    for ctype, cdata in _png_chunks(data):
         if ctype == b'CgBI':
             continue
-        if ctype == b'IDAT':
-            try:
-                cdata = zlib.compress(zlib.decompress(cdata, -15))
-            except Exception:
-                pass
-        out.write(struct.pack('>I', len(cdata)))
-        out.write(ctype)
-        out.write(cdata)
-        out.write(struct.pack('>I', binascii.crc32(ctype + cdata) & 0xffffffff))
+        elif ctype == b'IHDR':
+            ihdr = cdata
+            other_chunks.append((ctype, cdata))
+        elif ctype == b'IDAT':
+            idat_parts.extend(cdata)
+        elif ctype == b'IEND':
+            other_chunks.append((ctype, cdata))
+        else:
+            other_chunks.append((ctype, cdata))
+
+    if not ihdr or not idat_parts:
+        return data  # malformed, return as-is
+
+    # Parse IHDR for dimensions and color info
+    width = struct.unpack('>I', ihdr[0:4])[0]
+    height = struct.unpack('>I', ihdr[4:8])[0]
+    bit_depth = ihdr[8]
+    color_type = ihdr[9]
+
+    # Decompress all IDAT as raw deflate (no zlib wrapper, wbits=-15)
+    try:
+        raw_rows = zlib.decompress(bytes(idat_parts), -15)
+    except Exception:
+        return data
+
+    # BGR/BGRA -> RGB/RGBA swap for color types 2 (RGB) and 6 (RGBA)
+    if color_type in (2, 6) and bit_depth == 8:
+        rows = _unfilter_png_rows(raw_rows, width, height, color_type, bit_depth)
+        bpp = 3 if color_type == 2 else 4
+        for row in rows:
+            for px in range(0, len(row), bpp):
+                blue, green, red = row[px], row[px + 1], row[px + 2]
+                if color_type == 6:
+                    alpha = row[px + 3]
+                    if 0 < alpha < 255:
+                        red = min(255, round(red * 255 / alpha))
+                        green = min(255, round(green * 255 / alpha))
+                        blue = min(255, round(blue * 255 / alpha))
+                    row[px:px + 4] = bytes((red, green, blue, alpha))
+                else:
+                    row[px:px + 3] = bytes((red, green, blue))
+        raw_rows = _encode_unfiltered_rows(rows)
+
+    # Recompress with standard zlib wrapper
+    try:
+        new_idat = zlib.compress(raw_rows)
+    except Exception:
+        return data
+
+    # Reconstruct standard PNG, inserting new IDAT before IEND
+    out = io.BytesIO()
+    out.write(PNG_SIG)
+    for ctype, cdata in other_chunks:
+        if ctype == b'IEND':
+            out.write(_png_chunk(b'IDAT', new_idat))
+        if ctype != b'iDOT':
+            out.write(_png_chunk(ctype, cdata))
     return out.getvalue()
 
 
@@ -136,9 +311,22 @@ def _normalize_png(path):
         converted = _cgbi_to_png(raw)
         if converted is not raw:
             open(path, 'wb').write(converted)
+            raw = converted
+        if not _standard_png_ok(raw):
+            raise ValueError("invalid PNG icon")
         return True
+    except (OSError, struct.error, zlib.error, binascii.Error):
+        # CgBI conversion or file write failed -- remove partial file
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return False
     except Exception:
-        os.remove(path)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
         return False
 
 def extract_largest_icon(zf, app_dir, plist, out_path):
@@ -172,12 +360,30 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
         if stem_clean.startswith("Icon-") or stem_clean.startswith("Icon") or stem_clean == "iTunesArtwork":
             candidates.append((3, -size, name))
 
-    art = app_prefix + "iTunesArtwork"
-    if art in zf.namelist():
-        try:
-            size = zf.getinfo(art).file_size
-            candidates.append((0, -size, art))
-        except: pass
+    # Pass 2: Flutter / framework icons at common deep paths
+    # These are standard PNGs (not CgBI), often higher resolution than root-level icons
+    flutter_paths = [
+        f"{app_prefix}Frameworks/App.framework/flutter_assets/assets/images/icon.png",
+        f"{app_prefix}Frameworks/App.framework/flutter_assets/Icon-1024.png",
+        f"{app_prefix}Frameworks/App.framework/flutter_assets/icon.png",
+        f"{app_prefix}Frameworks/App.framework/flutter_assets/AppIcon.png",
+    ]
+    for fpath in flutter_paths:
+        if fpath in zf.namelist():
+            try:
+                size = zf.getinfo(fpath).file_size
+                candidates.append((5, -size, fpath))
+            except Exception:
+                pass
+
+    # iTunesArtwork (no .png extension) -- highest priority, fallback
+    for art_name in (f"{app_prefix}iTunesArtwork", "iTunesArtwork"):
+        if art_name in zf.namelist():
+            try:
+                size = zf.getinfo(art_name).file_size
+                candidates.append((0, -size, art_name))
+            except Exception:
+                pass
 
     if not candidates: return False
     candidates.sort()
@@ -220,6 +426,16 @@ def parse_ipa(ipa_path: Path):
     except Exception as e:
         print(f"  ❌ 解析失败 {ipa_path.name}: {e}")
         return None
+
+def cached_meta_usable(meta: dict) -> bool:
+    icon_filename = meta.get("icon_filename")
+    if not icon_filename:
+        return True
+    icon_path = ICONS_DIR / icon_filename
+    try:
+        return icon_path.exists() and _standard_png_ok(icon_path.read_bytes())
+    except Exception:
+        return False
 
 def build_app_entry(meta: dict) -> dict:
     ipa_url = with_access_token(f"{BASE_URL}/ipa/{quote(meta['ipa_filename'])}")
@@ -281,9 +497,15 @@ def scan():
 
     for ipa in ipa_files:
         sig = file_signature(ipa)
-        new_cache[ipa.name] = {"sig": sig}
-        if cache.get(ipa.name, {}).get("sig") == sig and "meta" in cache[ipa.name]:
-            meta = cache[ipa.name]["meta"]
+        new_cache[ipa.name] = {"sig": sig, "icon_extractor": ICON_EXTRACTOR_VERSION}
+        cached = cache.get(ipa.name, {})
+        if (
+            cached.get("sig") == sig and
+            cached.get("icon_extractor") == ICON_EXTRACTOR_VERSION and
+            "meta" in cached and
+            cached_meta_usable(cached["meta"])
+        ):
+            meta = cached["meta"]
             new_cache[ipa.name]["meta"] = meta
             print(f"  ✓ 缓存命中: {ipa.name}")
         else:
