@@ -88,9 +88,17 @@
   a { color:var(--accent); text-decoration:none }
   a:hover { text-decoration:underline }
 
-  .app-shell { min-height:100vh; padding:20px; display:grid; gap:14px; align-content:start }
+  .app-shell {
+    min-height:100vh;
+    padding:20px;
+    display:grid;
+    grid-template-columns:216px minmax(0, 1fr);
+    grid-template-rows:auto 1fr;
+    gap:14px;
+    align-content:start;
+  }
   .topbar,
-  .subbar,
+  .sidebar,
   .panel {
     border:1px solid var(--line);
     background:var(--surface);
@@ -98,6 +106,8 @@
     box-shadow:var(--shadow);
   }
   .topbar {
+    grid-column:2;
+    grid-row:1;
     position:sticky;
     top:12px;
     z-index:20;
@@ -159,6 +169,9 @@
     background:transparent;
     color:var(--muted);
     white-space:nowrap;
+    display:flex;
+    align-items:center;
+    justify-content:center;
     transition:background .18s ease, color .18s ease, transform .18s ease;
   }
   .theme-switch button:hover,
@@ -215,22 +228,99 @@
     display:grid;
     place-items:center;
   }
+  .btn.icon.sm { width:30px; }
+  .btn.icon svg { display:block }
+  .btn.danger.icon {
+    color:var(--danger);
+  }
+  .btn.danger.icon:hover svg { color:#fff }
+  .btn.icon.star { color:var(--muted); }
+  .btn.icon.star.active { color:#f4b740; border-color:rgba(244,183,64,.45); background:rgba(244,183,64,.12); }
 
-  .subbar {
-    border-radius:20px;
-    padding:12px;
+  .sidebar {
+    grid-column:1;
+    grid-row:1 / span 2;
+    position:sticky;
+    top:20px;
+    align-self:start;
+    min-height:calc(100vh - 40px);
+    border-radius:22px;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:22px;
+  }
+  .side-brand {
     display:flex;
     align-items:center;
+    gap:12px;
+    padding:2px 2px 14px;
+    border-bottom:1px solid var(--line);
+  }
+  .side-brand strong {
+    display:block;
+    font-size:15px;
+    line-height:1.2;
+  }
+  .side-brand span {
+    display:block;
+    margin-top:4px;
+    color:var(--muted);
+    font-size:12px;
+  }
+  .top-title {
+    min-width:160px;
+  }
+  .top-title h1 {
+    margin:0;
+    font-size:16px;
+    line-height:1.1;
+  }
+  .top-title span {
+    display:block;
+    margin-top:4px;
+    color:var(--muted);
+    font-size:12px;
   }
   .tabs {
-    overflow:auto;
     width:100%;
+    overflow:visible;
+    padding:0;
+    border:0;
+    background:transparent;
+    flex-direction:column;
+    gap:8px;
+  }
+  .tabs button {
+    width:100%;
+    min-height:44px;
+    justify-content:flex-start;
+    padding:0 14px;
+  }
+  .tabs button.active {
+    box-shadow:0 12px 24px var(--accent-soft);
   }
 
-  .view { animation:viewIn .18s ease both }
+  .view {
+    grid-column:2;
+    grid-row:2;
+    min-width:0;
+    width:min(1180px, 100%);
+    margin:0 auto;
+    animation:viewIn .18s ease both;
+  }
+  .apps-view {
+    width:min(1120px, 100%);
+  }
   .panel {
     border-radius:22px;
     overflow:hidden;
+  }
+  .apps-panel {
+    overflow:visible;
+  }
+  .apps-panel .panel-body {
+    position:relative;
   }
   .panel-head {
     padding:16px 18px;
@@ -253,6 +343,163 @@
   }
   .panel-body { padding:16px 18px 18px }
 
+  .head-actions {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex:0 1 auto;
+    min-width:0;
+  }
+  .head-actions.wl { flex:1 1 460px; max-width:560px }
+  .head-input {
+    min-width:140px;
+    height:30px;
+    padding:4px 10px;
+    font-size:12px;
+    border-radius:8px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--text);
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  .head-input:focus {
+    outline:none;
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(91,140,255,.16);
+  }
+  .head-actions.wl .head-input:first-child { flex:0 0 110px; min-width:0 }
+  .head-actions.wl .head-input:nth-child(2) { flex:1 1 0; min-width:0 }
+  @media (max-width: 760px) {
+    .panel-head { flex-wrap:wrap }
+    .head-actions, .head-actions.wl { width:100%; flex:1 1 100% }
+    .head-actions.wl .head-input:first-child { flex:0 0 100px }
+  }
+
+  .group-chips {
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .group-chip {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:5px 8px 5px 6px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    max-width:100%;
+  }
+  .group-chip:hover {
+    border-color:var(--line-2);
+    box-shadow:0 4px 14px rgba(0,0,0,.08);
+    transform:translateY(-1px);
+  }
+  .group-chip.prio {
+    border-color:rgba(91,140,255,.45);
+    background:linear-gradient(180deg, rgba(91,140,255,.12), rgba(91,140,255,.04));
+  }
+  .chip-star {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:22px; height:22px;
+    padding:0;
+    border-radius:50%;
+    background:transparent;
+    color:var(--muted);
+    border:0;
+    min-height:0;
+  }
+  .chip-star:hover { color:var(--accent) }
+  .chip-star.active { color:#f5b400 }
+  .chip-link {
+    font-size:12.5px;
+    color:var(--text);
+    text-decoration:none;
+    max-width:200px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .chip-link:hover { color:var(--accent) }
+  .chip-del {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:20px; height:20px;
+    padding:0;
+    border-radius:50%;
+    background:transparent;
+    color:var(--muted);
+    border:0;
+    font-size:14px;
+    line-height:1;
+    min-height:0;
+    transition:background .15s ease, color .15s ease;
+  }
+  .chip-del:hover { background:rgba(255,69,58,.14); color:var(--danger) }
+
+  /* APP 同步按钮组 */
+  .sync-cluster { gap:8px; align-items:center }
+  .sync-pill {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    height:28px;
+    padding:0 10px 0 9px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--panel-2);
+    color:var(--muted);
+    font-size:11.5px;
+    line-height:1;
+    white-space:nowrap;
+    transition:border-color .18s ease, color .18s ease, background .18s ease;
+  }
+  .sync-pill.is-busy { color:var(--accent); border-color:rgba(91,140,255,.4); background:rgba(91,140,255,.08) }
+  .sync-pill.is-ok { color:#22a06b; border-color:rgba(34,160,107,.35); background:rgba(34,160,107,.08) }
+  .sync-pill.is-err { color:var(--danger); border-color:rgba(255,69,58,.4); background:rgba(255,69,58,.08) }
+  .sync-pill .dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.7 }
+  .sync-pill.is-busy .dot { animation:pulse-dot 1s ease-in-out infinite }
+  @keyframes pulse-dot {
+    0%,100% { transform:scale(1); opacity:.5 }
+    50%     { transform:scale(1.35); opacity:1 }
+  }
+
+  .btn.icon.spin svg { animation:spin-rev .9s linear infinite }
+  @keyframes spin-rev { from { transform:rotate(0) } to { transform:rotate(-360deg) } }
+
+  .pulse-btn { display:inline-flex; align-items:center; gap:6px; position:relative; overflow:hidden }
+  .pulse-btn.loading { opacity:.85 }
+  .pulse-btn .spinner {
+    width:12px; height:12px; border-radius:50%;
+    border:2px solid currentColor;
+    border-right-color:transparent;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg) } }
+
+  /* 面板顶部进度条带（indeterminate） */
+  .topbar-progress {
+    position:relative;
+    height:2px;
+    margin:-1px -18px 12px;
+    overflow:hidden;
+    background:rgba(91,140,255,.10);
+  }
+  .topbar-progress span {
+    position:absolute; inset:0;
+    width:35%;
+    background:linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation:topbar-slide 1.2s ease-in-out infinite;
+  }
+  @keyframes topbar-slide {
+    0%   { left:-40% }
+    100% { left:100% }
+  }
+
   input,
   select,
   textarea {
@@ -273,10 +520,44 @@
   }
   input::placeholder,
   textarea::placeholder { color:var(--muted) }
+  .password-wrap {
+    position:relative;
+  }
+  .password-wrap input {
+    padding-right:46px;
+  }
+  .eye-btn {
+    position:absolute;
+    right:8px;
+    top:50%;
+    width:34px;
+    height:34px;
+    border-radius:10px;
+    display:grid;
+    place-items:center;
+    color:var(--muted);
+    background:transparent;
+    transform:translateY(-50%);
+    transition:background .18s ease, color .18s ease, transform .18s ease;
+  }
+  .eye-btn:hover {
+    color:var(--text);
+    background:var(--panel-2);
+    transform:translateY(-50%) scale(1.02);
+  }
+  .eye-btn svg {
+    width:18px;
+    height:18px;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:1.8;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+  }
 
   .toolbar {
     display:grid;
-    grid-template-columns:minmax(220px,1fr) auto auto;
+    grid-template-columns:minmax(220px,1fr) auto;
     gap:10px;
     align-items:center;
     margin-bottom:14px;
@@ -295,32 +576,50 @@
   }
   .search input { padding-left:34px }
 
-  .app-list { display:grid; gap:10px }
+  .app-list {
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+    gap:14px;
+    align-items:start;
+    overflow:visible;
+  }
   .app-row {
+    position:relative;
     border:1px solid var(--line);
-    border-radius:18px;
+    border-radius:20px;
     background:linear-gradient(180deg, var(--panel), var(--panel-2));
-    overflow:hidden;
-    transition:border-color .18s ease, transform .18s ease;
+    overflow:visible;
+    min-height:190px;
+    transition:border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  }
+  .app-row.expanded {
+    z-index:30;
+    border-color:var(--accent);
+    box-shadow:0 18px 40px rgba(0,0,0,.22);
   }
   .app-row:hover {
-    transform:translateY(-1px);
+    transform:translateY(-2px);
     border-color:var(--line-2);
+    box-shadow:0 16px 34px rgba(0,0,0,.16);
   }
   .app-main {
     width:100%;
-    padding:14px 16px;
+    padding:16px;
     background:transparent;
     display:grid;
-    grid-template-columns:auto minmax(0,1fr) auto auto auto;
-    gap:12px;
-    align-items:center;
+    grid-template-columns:58px minmax(0,1fr) auto;
+    grid-template-areas:
+      "icon info chev"
+      "meta meta meta";
+    gap:12px 14px;
+    align-items:start;
     text-align:left;
   }
   .app-icon {
-    width:42px;
-    height:42px;
-    border-radius:12px;
+    grid-area:icon;
+    width:58px;
+    height:58px;
+    border-radius:16px;
     overflow:hidden;
     display:grid;
     place-items:center;
@@ -339,18 +638,22 @@
     background:transparent;
     border-style:dashed;
   }
-  .app-info { min-width:0 }
+  .app-info {
+    grid-area:info;
+    min-width:0;
+    padding-top:2px;
+  }
   .app-info h3 {
     margin:0;
-    font-size:15px;
+    font-size:16px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
   }
   .app-info p {
-    margin:3px 0 0;
+    margin:5px 0 0;
     color:var(--muted);
-    font-size:12px;
+    font-size:13px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
@@ -360,7 +663,7 @@
   }
   .app-meta-line {
     display:block;
-    margin-top:2px;
+    margin-top:6px;
     color:var(--muted);
     font-size:12px;
     white-space:nowrap;
@@ -379,34 +682,103 @@
     border:1px solid var(--line);
     background:var(--panel);
   }
+  .app-card-meta {
+    grid-area:meta;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-top:4px;
+  }
+  .app-card-meta-left {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-width:0;
+  }
   .chev {
+    grid-area:chev;
+    justify-self:end;
     color:var(--muted);
     font-size:18px;
     transition:transform .18s ease;
   }
   .chev.open { transform:rotate(90deg) }
   .version-list {
+    position:absolute;
+    left:12px;
+    right:12px;
+    top:calc(100% - 8px);
+    z-index:12;
     max-height:0;
+    opacity:0;
+    pointer-events:none;
+    transform:translateY(-6px) scale(.99);
     overflow:hidden;
-    transition:max-height .25s ease;
+    border:1px solid var(--line);
+    border-radius:16px;
+    background:var(--panel);
+    box-shadow:0 18px 38px rgba(0,0,0,.24);
+    transition:max-height .22s ease, opacity .18s ease, transform .18s ease;
   }
-  .version-list.open { max-height:2200px }
+  .version-list.open {
+    max-height:min(380px, 55vh);
+    opacity:1;
+    pointer-events:auto;
+    transform:translateY(0) scale(1);
+    overflow:auto;
+  }
   .version-row {
     display:grid;
-    grid-template-columns:70px minmax(0,1fr) 90px 130px auto auto;
-    gap:10px;
-    align-items:center;
-    padding:12px 16px;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:12px;
+    align-items:start;
+    padding:12px 16px 14px;
     border-top:1px solid var(--line);
     font-size:12px;
   }
-  .version-row .ver { font-weight:800 }
+  .version-row:first-child {
+    border-top:0;
+  }
+  .version-row.invalid {
+    background:var(--danger-soft);
+  }
+  .version-row .ver {
+    font-weight:800;
+    color:var(--text);
+  }
   .version-row .file {
+    display:block;
+    margin-top:3px;
     min-width:0;
     color:var(--muted);
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
+  }
+  .version-title,
+  .version-actions {
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .version-actions {
+    justify-content:flex-end;
+    flex-wrap:wrap;
+  }
+  .bad-badge {
+    padding:2px 7px;
+    border-radius:999px;
+    color:var(--danger);
+    background:var(--danger-soft);
+    border:1px solid rgba(255,107,120,.24);
+    font-size:11px;
+    line-height:1.4;
+  }
+  .bad-badge.warn {
+    color:var(--accent);
+    background:var(--accent-soft);
+    border-color:rgba(91,140,255,.24);
   }
 
   .grid {
@@ -415,6 +787,15 @@
   }
   .grid.two {
     grid-template-columns:repeat(2, minmax(0,1fr));
+  }
+  .grid.rules {
+    grid-template-columns:1fr;
+    align-items:start;
+  }
+  @media (max-width: 900px) {
+    .grid.rules {
+      grid-template-columns:1fr;
+    }
   }
   .list { display:flex; flex-direction:column }
   .list-row {
@@ -442,46 +823,106 @@
   .addbar.three {
     grid-template-columns:minmax(130px,.9fr) minmax(0,1.4fr) auto;
   }
-  .whitelist-item {
-    padding:12px 0;
-    border-bottom:1px solid var(--line);
+  .whitelist-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+    gap:12px;
   }
-  .whitelist-item:last-child { border-bottom:0 }
+  .whitelist-item {
+    position:relative;
+    padding:14px 14px 14px 18px;
+    border:1px solid var(--line);
+    border-radius:14px;
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    overflow:hidden;
+    transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  }
+  .whitelist-item::before {
+    content:"";
+    position:absolute;
+    left:0; top:14px; bottom:14px; width:3px;
+    border-radius:3px;
+    background:linear-gradient(180deg, var(--accent), rgba(91,140,255,.35));
+    opacity:.55;
+    transition:opacity .18s ease;
+  }
+  .whitelist-item:hover::before { opacity:.9 }
+  .whitelist-item:hover {
+    border-color:var(--line-2);
+    box-shadow:0 8px 20px rgba(0,0,0,.10);
+    transform:translateY(-1px);
+  }
   .whitelist-top {
     display:flex;
     align-items:center;
     justify-content:space-between;
-    gap:10px;
+    gap:8px;
+  }
+  .whitelist-top b {
+    font-size:14px;
+    color:var(--text);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .kw-count {
+    display:inline-block;
+    margin-left:8px;
+    padding:1px 8px;
+    font-size:11px;
+    line-height:1.5;
+    color:var(--muted);
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:999px;
+    vertical-align:middle;
   }
   .tag-cloud {
     display:flex;
     flex-wrap:wrap;
-    gap:8px;
+    gap:6px;
     margin-top:10px;
   }
   .tag {
     display:inline-flex;
     align-items:center;
-    gap:6px;
-    padding:6px 10px;
+    gap:4px;
+    padding:3px 9px 3px 10px;
     border-radius:999px;
-    border:1px solid var(--line);
-    background:var(--panel);
+    border:1px solid transparent;
+    background:var(--accent-soft);
+    color:var(--text);
     font-size:12px;
+    line-height:1.6;
+    transition:background .15s ease, color .15s ease;
+  }
+  .tag:hover {
+    background:rgba(91,140,255,.28);
   }
   .tag button {
-    padding:0;
+    padding:0 0 0 2px;
     background:transparent;
     color:var(--muted);
+    font-size:14px;
+    line-height:1;
+    min-height:0;
+    border:0;
   }
   .tag button:hover { color:var(--danger) }
   .inline-add {
     width:auto;
     min-width:140px;
     max-width:220px;
+    padding:4px 10px;
+    min-height:28px;
+    border-radius:999px;
+    font-size:12px;
+    background:transparent;
+    border:1px dashed var(--line);
   }
 
   .field { display:grid; gap:6px }
+  .field + .field { margin-top:12px }
   .field label,
   .mini-label {
     color:var(--muted);
@@ -579,7 +1020,7 @@
   }
 
   .empty {
-    min-height:160px;
+    min-height:120px;
     display:grid;
     place-items:center;
     text-align:center;
@@ -642,41 +1083,78 @@
     }
   }
   @media (max-width:1080px) {
+    .app-shell {
+      grid-template-columns:196px minmax(0, 1fr);
+    }
     .grid.two {
       grid-template-columns:1fr;
     }
   }
   @media (max-width:820px) {
+    .app-shell {
+      grid-template-columns:1fr;
+      grid-template-rows:auto auto 1fr;
+    }
+    .sidebar,
+    .topbar,
+    .view {
+      grid-column:1;
+    }
+    .sidebar {
+      grid-row:2;
+      position:relative;
+      top:0;
+      min-height:auto;
+      padding:10px;
+      justify-content:flex-start;
+      border-radius:18px;
+    }
+    .side-brand {
+      display:none;
+    }
+    .topbar {
+      grid-row:1;
+    }
+    .view {
+      grid-row:3;
+    }
+    .tabs {
+      flex-direction:row;
+      overflow:auto;
+      gap:6px;
+    }
+    .tabs button {
+      width:auto;
+      justify-content:center;
+    }
     .toolbar,
     .grid3,
     .addbar,
     .addbar.three {
       grid-template-columns:1fr;
     }
-    .app-main {
-      grid-template-columns:auto minmax(0,1fr) auto;
-      grid-template-areas:
-        "icon info chev"
-        "icon latest latest"
-        "icon time time";
-      align-items:start;
+    .app-list {
+      grid-template-columns:1fr;
     }
-    .app-icon { grid-area:icon }
-    .app-info { grid-area:info }
-    .app-pill { grid-area:latest; width:max-content }
-    .app-time { grid-area:time }
-    .chev { grid-area:chev; justify-self:end }
+    .app-main {
+      grid-template-columns:54px minmax(0,1fr) auto;
+    }
+    .app-icon {
+      width:54px;
+      height:54px;
+    }
     .version-row {
-      grid-template-columns:1fr auto auto;
+      grid-template-columns:1fr;
     }
     .version-row .file {
-      grid-column:1 / -1;
-      grid-row:2;
+      grid-column:auto;
+      grid-row:auto;
     }
     .version-row .time {
-      grid-column:1 / -1;
-      grid-row:3;
       color:var(--muted);
+    }
+    .version-actions {
+      justify-content:flex-start;
     }
   }
   @media (max-width:720px) {
@@ -692,7 +1170,7 @@
       width:100%;
       justify-content:space-between;
     }
-    .subbar,
+    .sidebar,
     .panel {
       border-radius:18px;
     }
@@ -708,13 +1186,25 @@
 </head>
 <body>
 <div class="app-shell" x-data="ipaApp()" x-init="init()">
-  <header class="topbar">
-    <div class="brand">
+  <aside class="sidebar">
+    <div class="side-brand">
       <img class="brand-mark" src="/static/brand-icon.svg" alt="">
       <div>
-        <h1>IPA Self-Host</h1>
+        <strong>IPA Self-Host</strong>
         <span x-text="workspaceLabel()"></span>
       </div>
+    </div>
+    <nav class="tabs" aria-label="工作区">
+      <template x-for="w in workspaces" :key="w.id">
+        <button type="button" :class="{active:workspace===w.id}" @click="setWorkspace(w.id)" x-text="w.name"></button>
+      </template>
+    </nav>
+  </aside>
+
+  <header class="topbar">
+    <div class="top-title">
+      <h1 x-text="workspaceLabel()"></h1>
+      <span>IPA 私有源管理</span>
     </div>
     <div class="header-actions">
       <div class="theme-switch" aria-label="主题切换">
@@ -728,32 +1218,28 @@
     </div>
   </header>
 
-  <section class="subbar">
-    <nav class="tabs" aria-label="工作区">
-      <template x-for="w in workspaces" :key="w.id">
-        <button type="button" :class="{active:workspace===w.id}" @click="setWorkspace(w.id)" x-text="w.name"></button>
-      </template>
-    </nav>
-  </section>
-
-  <section class="view" x-show="workspace==='apps'" x-cloak x-transition.opacity.duration.150ms>
-    <div class="panel">
+  <section class="view apps-view" x-show="workspace==='apps'" x-cloak x-transition.opacity.duration.150ms>
+    <div class="panel apps-panel">
       <div class="panel-head">
         <div class="head-block">
-          <h2>应用</h2>
-          <span x-text="appSearch ? '筛选中' : '最近更新'"></span>
+          <h2>APP</h2>
+          <span x-text="appSearch ? '筛选中' : appsSummary()"></span>
         </div>
-        <button type="button" class="btn sm" @click="loadIpa()">刷新列表</button>
+        <button type="button" class="btn sm primary pulse-btn" @click="reindexNow()" :disabled="reindexing" :class="{loading:reindexing}" title="重新扫描磁盘并重建 IPA 元信息缓存">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" x-show="!reindexing"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>
+          <span class="spinner" x-show="reindexing" x-cloak aria-hidden="true"></span>
+          <span x-text="reindexing ? '索引中…' : '重建索引'"></span>
+        </button>
       </div>
       <div class="panel-body">
+        <div class="topbar-progress" x-show="reindexing" x-cloak><span></span></div>
         <div class="toolbar">
-          <div class="search"><input x-model="appSearch" placeholder="搜索应用 / 文件 / 版本"></div>
+          <div class="search"><input x-model="appSearch" placeholder="搜索 APP / 文件 / 版本"></div>
           <select x-model="appSort">
             <option value="recent">最近更新</option>
             <option value="name">名称</option>
             <option value="count">版本数</option>
           </select>
-          <button type="button" class="btn" @click="setAllExpanded(!expandAll)" x-text="expandAll ? '收起全部' : '展开全部'"></button>
         </div>
 
         <div class="skeleton-grid" x-show="loading" x-cloak>
@@ -773,8 +1259,8 @@
 
         <div class="app-list" x-show="!loading && filteredApps().length" x-cloak>
           <template x-for="app in filteredApps()" :key="app.name">
-            <article class="app-row">
-              <button type="button" class="app-main" @click="app.expanded = !app.expanded">
+            <article class="app-row" :class="{expanded:app.expanded}">
+              <button type="button" class="app-main" @click="toggleApp(app)">
                 <div class="app-icon" :class="{missing: !appIconSrc(app)}">
                   <template x-if="appIconSrc(app)">
                     <img :src="appIconSrc(app)" @error="handleIconError($event, app)" alt="">
@@ -782,22 +1268,41 @@
                 </div>
                 <div class="app-info">
                   <h3 x-text="app.name"></h3>
-                  <p class="app-desc" x-text="app.description"></p>
-                  <span class="app-meta-line" x-text="app.versions.length + ' 个版本 · 最新 v' + (app.versions[0]?.version || '-')"></span>
+                  <p class="app-desc" x-text="app.description" x-show="!app.expanded"></p>
+                  <span class="app-meta-line" x-text="appSummary(app)" x-show="!app.expanded"></span>
                 </div>
-                <span class="app-pill" x-text="(app.versions[0]?.size_mb || '-') + ' MB'"></span>
-                <span class="app-time" x-text="app.versions[0]?.mtime_str || '-'"></span>
+                <div class="app-card-meta">
+                  <div class="app-card-meta-left">
+                    <span class="app-time" x-text="app.versions[0]?.mtime_str || '-'"></span>
+                  </div>
+                </div>
                 <span class="chev" :class="{open:app.expanded}">›</span>
               </button>
               <div class="version-list" :class="{open:app.expanded}">
                 <template x-for="v in app.versions" :key="v.filename">
-                  <div class="version-row">
-                    <span class="ver" x-text="'v' + v.version"></span>
-                    <span class="file" x-text="v.filename"></span>
-                    <span x-text="(v.size_mb || '-') + ' MB'"></span>
-                    <span class="time" x-text="v.mtime_str || '-'"></span>
-                    <button type="button" class="btn sm icon" @click.stop="downloadIpa(v.filename)" title="下载">↓</button>
-                    <button type="button" class="btn danger sm" @click.stop="delIpaSingle(v.filename)">删除</button>
+                  <div class="version-row" :class="{invalid:v.scan_status==='invalid'}">
+                    <div class="version-info">
+                      <div class="version-title">
+                        <span class="ver" x-text="versionLabel(v)"></span>
+                        <span class="bad-badge" x-show="v.scan_status==='invalid'" x-cloak>损坏</span>
+                        <span class="bad-badge warn" x-show="v.scan_status==='unscanned'" x-cloak>未入库</span>
+                      </div>
+                    </div>
+                    <div class="version-actions">
+                      <button type="button" class="btn sm icon" @click.stop="downloadIpa(v)" :disabled="v.downloadable===false" title="下载" aria-label="下载">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="m6 12 6 6 6-6"/><path d="M5 20h14"/></svg>
+                      </button>
+                      <template x-if="v.protected">
+                        <span class="btn sm icon" title="受保护文件，禁止删除" aria-label="受保护" style="cursor:not-allowed;opacity:.55;">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                        </span>
+                      </template>
+                      <template x-if="!v.protected">
+                        <button type="button" class="btn danger sm icon" @click.stop="delIpaSingle(v.filename)" title="删除" aria-label="删除">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                      </template>
+                    </div>
                   </div>
                 </template>
               </div>
@@ -809,12 +1314,18 @@
   </section>
 
   <section class="view" x-show="workspace==='rules'" x-cloak x-transition.opacity.duration.150ms>
-    <div class="grid two">
+    <div class="grid rules">
       <div class="panel">
         <div class="panel-head">
           <div class="head-block">
             <h2>群组</h2>
-            <span>来源</span>
+            <span x-text="(cfg.groups || []).length + ' 个来源 · ' + (cfg.priority_groups || []).length + ' 优先'"></span>
+          </div>
+          <div class="head-actions">
+            <input class="head-input" x-model="newGroup" placeholder="https://t.me/xxx" @keydown.enter.prevent="addGroup()">
+            <button type="button" class="btn primary sm icon" @click="addGroup()" title="添加群组" aria-label="添加群组">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
           </div>
         </div>
         <div class="panel-body">
@@ -826,23 +1337,22 @@
               </div>
             </div>
           </template>
-          <div class="list" x-show="cfg.groups && cfg.groups.length" x-cloak>
+          <div class="group-chips" x-show="cfg.groups && cfg.groups.length" x-cloak>
             <template x-for="g in (cfg.groups || [])" :key="g">
-              <div class="list-row">
+              <div class="group-chip" :class="{prio:(cfg.priority_groups || []).includes(g)}">
                 <button
                   type="button"
-                  class="btn sm icon"
+                  class="chip-star"
+                  :class="{active:(cfg.priority_groups || []).includes(g)}"
                   @click="togglePriority(g)"
                   :title="(cfg.priority_groups || []).includes(g) ? '取消优先' : '设为优先'"
-                  x-text="(cfg.priority_groups || []).includes(g) ? '★' : '☆'"></button>
-                <div class="grow"><a :href="g" target="_blank" x-text="g"></a></div>
-                <button type="button" class="btn danger sm" @click="delGroup(g)">删除</button>
+                  :aria-label="(cfg.priority_groups || []).includes(g) ? '取消优先' : '设为优先'">
+                  <svg viewBox="0 0 24 24" width="14" height="14" :fill="(cfg.priority_groups || []).includes(g) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </button>
+                <a class="chip-link" :href="g" target="_blank" x-text="groupLabel(g)" :title="g"></a>
+                <button type="button" class="chip-del" @click="delGroup(g)" title="移除" aria-label="移除">×</button>
               </div>
             </template>
-          </div>
-          <div class="addbar">
-            <input x-model="newGroup" placeholder="https://t.me/xxx" @keydown.enter.prevent="addGroup()">
-            <button type="button" class="btn primary" @click="addGroup()">添加</button>
           </div>
         </div>
       </div>
@@ -851,7 +1361,14 @@
         <div class="panel-head">
           <div class="head-block">
             <h2>白名单</h2>
-            <span>关键词</span>
+            <span x-text="(cfg.whitelist || []).length + ' 个 APP · ' + whitelistKeywordTotal() + ' 个关键词'"></span>
+          </div>
+          <div class="head-actions wl">
+            <input class="head-input" x-model="newApp.name" placeholder="应用名">
+            <input class="head-input" x-model="newApp.keywords" placeholder="关键词 1, 关键词 2">
+            <button type="button" class="btn primary sm icon" @click="addApp()" title="添加白名单" aria-label="添加白名单">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
           </div>
         </div>
         <div class="panel-body">
@@ -863,15 +1380,17 @@
               </div>
             </div>
           </template>
-          <div x-show="cfg.whitelist && cfg.whitelist.length" x-cloak>
+          <div class="whitelist-grid" x-show="cfg.whitelist && cfg.whitelist.length" x-cloak>
             <template x-for="app in (cfg.whitelist || [])" :key="app.name">
               <div class="whitelist-item">
                 <div class="whitelist-top">
                   <div class="grow">
                     <b x-text="app.name"></b>
-                    <span class="muted" x-text="' · ' + app.keywords.length + ' 词'"></span>
+                    <span class="kw-count" x-text="app.keywords.length + ' 词'"></span>
                   </div>
-                  <button type="button" class="btn danger sm" @click="delApp(app.name)">删除</button>
+                  <button type="button" class="btn danger sm icon" @click="delApp(app.name)" title="删除" aria-label="删除">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
                 </div>
                 <div class="tag-cloud">
                   <template x-for="(k,i) in app.keywords" :key="k">
@@ -881,11 +1400,6 @@
                 </div>
               </div>
             </template>
-          </div>
-          <div class="addbar three">
-            <input x-model="newApp.name" placeholder="应用名">
-            <input x-model="newApp.keywords" placeholder="关键词 1, 关键词 2">
-            <button type="button" class="btn primary" @click="addApp()">添加</button>
           </div>
         </div>
       </div>
@@ -926,20 +1440,24 @@
         <div class="panel-head">
           <div class="head-block">
             <h2>Bot</h2>
-            <span x-text="botCfg.has_token ? '@' + (botCfg.bot_username || '已配置') : '未配置'"></span>
+            <span x-text="botCfg.has_token ? '已配置' : '未配置'"></span>
           </div>
         </div>
         <div class="panel-body">
           <div class="field">
             <label>Bot Token</label>
-            <input x-model="botCfg.token" type="text" placeholder="123456:ABC-DEF1234gh...">
+            <input x-model="botCfg.token" type="text" :placeholder="botCfg.has_token ? (botCfg.token_preview || '已配置 · 留空不修改') : '123456:ABC-DEF1234gh...'">
+          </div>
+          <div class="field">
+            <label>USER_ID 白名单</label>
+            <input x-model="botCfg.user_ids_text" type="text" placeholder="123456789, 987654321">
           </div>
           <div class="actions" style="margin-top:10px">
             <label class="checkline"><input type="checkbox" x-model="botCfg.enabled"> 启用</label>
           </div>
           <div class="status-line" style="margin-top:12px">
-            <span class="dot" :class="{on:botCfg.has_token && botCfg.bot_username}"></span>
-            <span x-text="botCfg.has_token && botCfg.bot_username ? '已连接 @' + botCfg.bot_username : '未连接'"></span>
+            <span class="dot" :class="{on:botCfg.has_token}"></span>
+            <span x-text="botCfg.has_token ? '已连接' : '未连接'"></span>
             <span class="code" x-show="botCfg.has_token" x-cloak x-text="botCfg.token_preview || '***'"></span>
           </div>
           <div class="actions">
@@ -948,7 +1466,7 @@
           </div>
           <div x-show="botTestResult" x-cloak class="result-box" :class="botTestResult && botTestResult.ok ? 'ok' : 'err'">
             <template x-if="botTestResult && botTestResult.ok">
-              <div>连接正常：@<span x-text="botTestResult.bot?.username"></span> · <span x-text="botTestResult.bot?.name"></span></div>
+              <div>连接正常</div>
             </template>
             <template x-if="botTestResult && !botTestResult.ok">
               <div x-text="botTestResult.error"></div>
@@ -967,7 +1485,7 @@
         <div class="panel-body">
           <div class="field">
             <label>代理地址</label>
-            <input :value="proxyCfg.url" @input="proxyCfg.url=$event.target.value; proxyCfg.source='custom'" placeholder="socks5://10.0.0.100:7893">
+            <input :value="proxyCfg.url" @input="proxyCfg.url=$event.target.value; proxyCfg.source='custom'" placeholder="socks5://127.0.0.1:1080">
           </div>
           <div class="actions" style="margin-top:10px">
             <label class="checkline"><input type="checkbox" x-model="proxyCfg.enabled"> 启用</label>
@@ -1005,24 +1523,36 @@
         <div class="panel-head">
           <div class="head-block">
             <h2>账户</h2>
-            <span>用户名固定为 admin</span>
+            <span x-text="account.username ? account.username : '当前账号'"></span>
           </div>
         </div>
         <div class="panel-body">
           <div class="field">
-            <label>当前密码</label>
-            <input type="password" x-model="pw.old">
+            <label>用户名</label>
+            <input type="text" x-model="account.username" maxlength="32" autocomplete="username">
           </div>
           <div class="field" style="margin-top:12px">
             <label>新密码</label>
-            <input type="password" x-model="pw.new" maxlength="64">
+            <div class="password-wrap">
+              <input :type="account.showNewPassword ? 'text' : 'password'" x-model="account.newPassword" maxlength="64" autocomplete="new-password" placeholder="不修改可留空">
+              <button type="button" class="eye-btn" @click="account.showNewPassword=!account.showNewPassword" :aria-label="account.showNewPassword ? '隐藏密码' : '显示密码'" :title="account.showNewPassword ? '隐藏密码' : '显示密码'">
+                <svg x-show="!account.showNewPassword" x-cloak viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.8"></circle></svg>
+                <svg x-show="account.showNewPassword" x-cloak viewBox="0 0 24 24"><path d="M10.6 5.2A10.7 10.7 0 0 1 12 5c6 0 9.5 7 9.5 7a15.2 15.2 0 0 1-3.1 3.8"></path><path d="M14.1 14.2A3 3 0 0 1 9.8 9.9"></path><path d="M3 3l18 18"></path><path d="M6.6 6.7C3.8 8.6 2.5 12 2.5 12s3.5 7 9.5 7c1.5 0 2.9-.4 4.1-1"></path></svg>
+              </button>
+            </div>
           </div>
           <div class="field" style="margin-top:12px">
             <label>确认新密码</label>
-            <input type="password" x-model="pw.confirm" maxlength="64">
+            <div class="password-wrap">
+              <input :type="account.showConfirmPassword ? 'text' : 'password'" x-model="account.confirmPassword" maxlength="64" autocomplete="new-password" placeholder="不修改可留空">
+              <button type="button" class="eye-btn" @click="account.showConfirmPassword=!account.showConfirmPassword" :aria-label="account.showConfirmPassword ? '隐藏密码' : '显示密码'" :title="account.showConfirmPassword ? '隐藏密码' : '显示密码'">
+                <svg x-show="!account.showConfirmPassword" x-cloak viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.8"></circle></svg>
+                <svg x-show="account.showConfirmPassword" x-cloak viewBox="0 0 24 24"><path d="M10.6 5.2A10.7 10.7 0 0 1 12 5c6 0 9.5 7 9.5 7a15.2 15.2 0 0 1-3.1 3.8"></path><path d="M14.1 14.2A3 3 0 0 1 9.8 9.9"></path><path d="M3 3l18 18"></path><path d="M6.6 6.7C3.8 8.6 2.5 12 2.5 12s3.5 7 9.5 7c1.5 0 2.9-.4 4.1-1"></path></svg>
+              </button>
+            </div>
           </div>
           <div class="actions">
-            <button type="button" class="btn primary" @click="changePassword()">修改</button>
+            <button type="button" class="btn primary" @click="saveAccount()" :disabled="accountSaving" x-text="accountSaving ? '保存中' : '保存账户'"></button>
           </div>
         </div>
       </div>
@@ -1110,7 +1640,7 @@ function normalizeWorkspace(name) {
 function ipaApp() {
   return {
     workspaces: [
-      { id: 'apps', name: '应用' },
+      { id: 'apps', name: 'APP' },
       { id: 'rules', name: '规则' },
       { id: 'ops', name: '设置' },
       { id: 'logs', name: '日志' },
@@ -1118,9 +1648,18 @@ function ipaApp() {
     workspace: 'apps',
     cfg: { groups: [], priority_groups: [], whitelist: [], rate_limit: {} },
     status: {},
-    pw: { old: '', new: '', confirm: '' },
+    account: { username: '', newPassword: '', confirmPassword: '', showNewPassword: false, showConfirmPassword: false },
+    accountSaving: false,
     ipaList: [],
     appGroups: [],
+    reloading: false,
+    reindexing: false,
+    lastSyncAt: 0,
+    lastSyncStatus: '',  // '' | 'ok' | 'busy' | 'err'
+    lastSyncMsg: '',
+    _pollTimer: null,
+    _tickTimer: null,
+    _nowTick: 0,
     newGroup: '',
     newApp: { name: '', keywords: '' },
     newKw: {},
@@ -1134,8 +1673,7 @@ function ipaApp() {
     currentTheme: 'dark',
     appSearch: '',
     appSort: 'recent',
-    expandAll: false,
-    botCfg: { token: '', enabled: true, token_preview: '', has_token: false, bot_username: '', chat_id: '' },
+    botCfg: { token: '', enabled: true, token_preview: '', has_token: false, bot_username: '', chat_id: '', user_ids: [], user_ids_text: '' },
     botSaving: false,
     botTesting: false,
     botTestResult: null,
@@ -1157,11 +1695,12 @@ function ipaApp() {
       } finally {
         this.loading = false;
       }
-      await Promise.allSettled([this.loadProxy(), this.loadBot()]);
+      await Promise.allSettled([this.loadProxy(), this.loadBot(), this.loadAccount()]);
       setInterval(() => {
         if (this.workspace === 'logs' && this.autoRefresh) this.loadLog();
         if (this.workspace === 'apps') this.loadStatus();
       }, 3000);
+      this.startAutoSync();
     },
 
     workspaceLabel() {
@@ -1185,9 +1724,10 @@ function ipaApp() {
       localStorage.setItem('ipa-theme-mode', this.themeMode);
     },
 
-    setAllExpanded(open) {
-      this.expandAll = open;
-      for (const app of this.appGroups) app.expanded = open;
+    toggleApp(app) {
+      const shouldOpen = !app.expanded;
+      for (const item of this.appGroups) item.expanded = false;
+      app.expanded = shouldOpen;
     },
 
     appIconSrc(app) {
@@ -1197,6 +1737,63 @@ function ipaApp() {
 
     handleIconError(_event, app) {
       app.iconFailed = true;
+    },
+
+    versionLabel(v) {
+      return v && v.version ? 'v' + v.version : '版本未知';
+    },
+
+    versionTail(app, v) {
+      const name = (v && v.filename) || '';
+      if (!name) return '';
+      // strip trailing .ipa for display
+      let tail = name.replace(/\.ipa$/i, '');
+      // strip the app name prefix (case insensitive, common separators)
+      const an = (app && app.name) ? app.name.trim() : '';
+      if (an) {
+        const safe = an.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        tail = tail.replace(new RegExp('^' + safe + '[\\s_\\-·]*', 'i'), '');
+      }
+      // strip leading version like "8.0.50_" so it's not echoing versionLabel
+      const ver = (v && v.version) ? String(v.version) : '';
+      if (ver) {
+        const safeVer = ver.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        tail = tail.replace(new RegExp('^' + safeVer + '[\\s_\\-·]*', 'i'), '');
+      }
+      tail = tail.replace(/^[\s_\-·]+/, '').trim();
+      return tail;
+    },
+
+    appSummary(app) {
+      const latest = app.versions[0] || {};
+      const status = latest.scan_status === 'invalid' ? ' · 文件损坏' : (latest.scan_status === 'unscanned' ? ' · 未入库' : '');
+      return app.versions.length + ' 个版本 · 最新 ' + this.versionLabel(latest) + status;
+    },
+
+    appsSummary() {
+      const apps = this.appGroups || [];
+      if (!apps.length) return '暂无 IPA';
+      let totalFiles = 0;
+      for (const app of apps) {
+        for (const v of (app.versions || [])) {
+          totalFiles++;
+        }
+      }
+      return apps.length + ' 个 APP · ' + totalFiles + ' 个文件';
+    },
+
+    groupLabel(g) {
+      if (!g) return '';
+      let s = String(g).trim();
+      s = s.replace(/^https?:\/\//i, '').replace(/^t\.me\//i, '').replace(/\/+$/, '');
+      return s || g;
+    },
+
+    whitelistKeywordTotal() {
+      const wl = (this.cfg && this.cfg.whitelist) || [];
+      let n = 0;
+      for (const app of wl) n += (app.keywords || []).length;
+      return n;
     },
 
     filteredApps() {
@@ -1232,7 +1829,7 @@ function ipaApp() {
             icon: null,
             iconFailed: false,
             versions: [],
-            expanded: this.expandAll,
+            expanded: false,
           };
         }
         if (f.icon && !map[name].icon) map[name].icon = f.icon;
@@ -1291,6 +1888,96 @@ function ipaApp() {
       const r = await this.api('GET', '/api/ipa');
       this.ipaList = r.files || [];
       this.groupApps();
+      this.lastSyncAt = Date.now();
+      if (this.lastSyncStatus !== 'busy') this.lastSyncStatus = 'ok';
+    },
+
+    async quickReload() {
+      if (this.reloading || this.reindexing) return;
+      this.reloading = true;
+      try {
+        await this.loadIpa();
+        this.lastSyncStatus = 'ok';
+        this.lastSyncMsg = '已刷新页面数据';
+      } catch (e) {
+        this.lastSyncStatus = 'err';
+        this.lastSyncMsg = '刷新失败：' + (e?.message || e);
+        this.showToast(this.lastSyncMsg, 'err');
+      } finally {
+        this.reloading = false;
+      }
+    },
+
+    async reindexNow() {
+      if (this.reindexing) return;
+      this.reindexing = true;
+      this.lastSyncStatus = 'busy';
+      this.lastSyncMsg = '正在扫描磁盘并重建索引…';
+      const t0 = performance.now();
+      try {
+        const r = await this.api('POST', '/api/reindex');
+        await this.loadIpa();
+        const ms = Math.max(1, Math.round(performance.now() - t0));
+        if (r && r.ok) {
+          this.lastSyncStatus = 'ok';
+          this.lastSyncMsg = `索引重建完成 · ${r.cache_count || 0} 个 IPA · 用时 ${ms}ms`;
+          this.showToast(this.lastSyncMsg);
+        } else {
+          this.lastSyncStatus = 'err';
+          this.lastSyncMsg = '重建失败' + (r?.error ? '：' + r.error : '');
+          this.showToast(this.lastSyncMsg, 'err');
+        }
+      } catch (e) {
+        this.lastSyncStatus = 'err';
+        this.lastSyncMsg = '重建失败：' + (e?.message || e);
+        this.showToast(this.lastSyncMsg, 'err');
+      } finally {
+        this.reindexing = false;
+      }
+    },
+
+    startAutoSync() {
+      // 每 1s 让 syncLabel 的"几秒前"自动重算
+      if (this._tickTimer) clearInterval(this._tickTimer);
+      this._tickTimer = setInterval(() => { this._nowTick = Date.now(); }, 1000);
+      // 后台轻量轮询：每 30s 在 APP 页且页面可见时拉一次 /api/ipa
+      const tick = async () => {
+        if (document.visibilityState !== 'visible') return;
+        if (this.workspace !== 'apps') return;
+        if (this.reindexing || this.reloading) return;
+        try { await this.loadIpa(); } catch (e) {}
+      };
+      if (this._pollTimer) clearInterval(this._pollTimer);
+      this._pollTimer = setInterval(tick, 30000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') tick();
+      });
+    },
+
+    get syncLabel() {
+      if (this.reindexing) return '索引中…';
+      if (this.reloading) return '刷新中…';
+      if (!this.lastSyncAt) return '尚未同步';
+      const now = this._nowTick || Date.now();
+      const sec = Math.max(0, Math.round((now - this.lastSyncAt) / 1000));
+      if (sec < 5) return '已就绪 · 刚刚';
+      if (sec < 60) return `已就绪 · ${sec}s 前`;
+      const m = Math.round(sec / 60);
+      if (m < 60) return `已就绪 · ${m}m 前`;
+      const h = Math.round(m / 60);
+      return `已就绪 · ${h}h 前`;
+    },
+    get syncStatusClass() {
+      if (this.reindexing || this.reloading) return 'is-busy';
+      if (this.lastSyncStatus === 'err') return 'is-err';
+      if (this.lastSyncStatus === 'ok') return 'is-ok';
+      return '';
+    },
+    get syncDotClass() {
+      return this.syncStatusClass;
+    },
+    get syncTooltip() {
+      return this.lastSyncMsg || '点击重建索引以扫描磁盘并刷新 IPA 元信息';
     },
 
     async loadLog() {
@@ -1378,8 +2065,12 @@ function ipaApp() {
       this.showToast('已删除');
     },
 
-    downloadIpa(filename) {
-      window.open('/_ipa_proxy/' + encodeURIComponent(filename), '_blank');
+    downloadIpa(v) {
+      if (!v || v.downloadable === false) {
+        this.showToast('这个 IPA 文件损坏，不能下载；建议删除后重新扫描。', 'err');
+        return;
+      }
+      window.location.href = '/_ipa_proxy/' + encodeURIComponent(v.filename);
     },
 
     async saveRate() {
@@ -1387,23 +2078,60 @@ function ipaApp() {
       this.showToast('速率已保存');
     },
 
-    async changePassword() {
-      if (!this.pw.old || !this.pw.new || !this.pw.confirm) {
-        this.showToast('请填完三个字段', 'err');
+    async loadAccount() {
+      try {
+        const r = await this.api('GET', '/api/account');
+        this.account.username = r.username || '';
+      } catch (e) {}
+    },
+
+    async saveAccount() {
+      const username = this.account.username.trim();
+      const newPassword = this.account.newPassword;
+      const confirmPassword = this.account.confirmPassword;
+      if (!username) {
+        this.showToast('请填写用户名', 'err');
         return;
       }
-      if (this.pw.new !== this.pw.confirm) {
+      if (newPassword || confirmPassword) {
+        if (newPassword !== confirmPassword) {
+          this.showToast('两次密码不一致', 'err');
+          return;
+        }
+        if (newPassword.length < 4) {
+          this.showToast('新密码至少 4 位', 'err');
+          return;
+        }
+      }
+      this.accountSaving = true;
+      try {
+        await this.api('PUT', '/api/account', {
+          username,
+          new_password: newPassword,
+        });
+        this.showToast('账号已更新，3 秒后跳转登录');
+        localStorage.setItem('ipa-login-user', username);
+        setTimeout(() => { window.location.href = '/login'; }, 3000);
+      } catch (e) {}
+      this.accountSaving = false;
+    },
+
+    async changePassword() {
+      if (!this.account.newPassword || !this.account.confirmPassword) {
+        this.showToast('请填写新密码', 'err');
+        return;
+      }
+      if (this.account.newPassword !== this.account.confirmPassword) {
         this.showToast('两次密码不一致', 'err');
         return;
       }
-      if (this.pw.new.length < 4) {
+      if (this.account.newPassword.length < 4) {
         this.showToast('新密码至少 4 位', 'err');
         return;
       }
       try {
         await this.api('PUT', '/api/password', {
-          old_password: this.pw.old,
-          new_password: this.pw.new,
+          new_password: this.account.newPassword,
         });
         this.showToast('已修改，3 秒后跳转登录');
         setTimeout(() => { window.location.href = '/login'; }, 3000);
@@ -1421,12 +2149,14 @@ function ipaApp() {
       try {
         const r = await this.api('GET', '/api/bot');
         this.botCfg = {
-          token: '',
+          token: r.token || '',
           enabled: r.enabled !== false,
           token_preview: r.token_preview || '',
           has_token: r.has_token,
           bot_username: r.bot_username || '',
           chat_id: r.chat_id || '',
+          user_ids: Array.isArray(r.user_ids) ? r.user_ids.map(String) : [],
+          user_ids_text: Array.isArray(r.user_ids) ? r.user_ids.map(String).join(', ') : '',
         };
       } catch (e) {}
     },
@@ -1439,7 +2169,7 @@ function ipaApp() {
       }
       this.botSaving = true;
       try {
-        const payload = { enabled: this.botCfg.enabled };
+        const payload = { enabled: this.botCfg.enabled, user_ids: this.botCfg.user_ids_text };
         if (token) payload.bot_token = token;
         const r = await this.api('PUT', '/api/bot', payload);
         this.showToast(r.msg || '已保存');

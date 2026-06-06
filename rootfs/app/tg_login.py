@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from telethon import TelegramClient
 
 CONFIG_PATH = Path("/config/config.json")
+PROXY_CONFIG_PATH = Path("/config/proxy.json")
 SESSION_PATH = Path("/session/tg-ipa-bot")
 PHONE_CODE_PATH = Path("/config/phone_code_hash.json")
 
@@ -14,7 +15,18 @@ def parse_proxy(s):
     p = urlparse(s)
     return ((p.scheme or "socks5").lower(), p.hostname, p.port or 1080)
 
-PROXY = parse_proxy(os.environ.get("TG_PROXY", ""))
+def load_proxy_url():
+    if PROXY_CONFIG_PATH.exists():
+        try:
+            cfg = json.loads(PROXY_CONFIG_PATH.read_text())
+            url = str(cfg.get("url") or "").strip()
+            if cfg.get("enabled", True) and url:
+                return url
+        except Exception:
+            pass
+    return os.environ.get("TG_PROXY", "")
+
+PROXY = parse_proxy(load_proxy_url())
 
 async def main():
     with open(CONFIG_PATH, "r") as f:

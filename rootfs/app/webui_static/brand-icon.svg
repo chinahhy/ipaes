@@ -1,19 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="IPA Self-Host">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="IPA Self-Host">
   <defs>
-    <linearGradient id="bg" x1="18" y1="10" x2="80" y2="88" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#6aa3ff"/>
-      <stop offset="1" stop-color="#2858f6"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7aa6ff"/>
+      <stop offset="0.55" stop-color="#3d6bff"/>
+      <stop offset="1" stop-color="#2148d6"/>
     </linearGradient>
-    <linearGradient id="tile" x1="28" y1="24" x2="68" y2="72" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#dce7ff"/>
+    <radialGradient id="sheen" cx="64" cy="22" r="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glyph" x1="40" y1="36" x2="92" y2="98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e3ecff"/>
     </linearGradient>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="0.4"/>
+    </filter>
   </defs>
-  <rect width="96" height="96" rx="24" fill="url(#bg)"/>
-  <path d="M27 28c0-5 4-9 9-9h20l13 13v36c0 5-4 9-9 9H36c-5 0-9-4-9-9V28Z" fill="url(#tile)" opacity=".96"/>
-  <path d="M56 20v9c0 3 2 5 5 5h8" fill="none" stroke="#8baaff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="35" y="39" width="11" height="11" rx="3" fill="#2f63f6"/>
-  <rect x="50" y="39" width="11" height="11" rx="3" fill="#2f63f6" opacity=".74"/>
-  <rect x="35" y="54" width="11" height="11" rx="3" fill="#2f63f6" opacity=".74"/>
-  <path d="M57 53v12m0 0-5-5m5 5 5-5" fill="none" stroke="#2f63f6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Apple-style squircle (superellipse approximation) -->
+  <path d="
+    M64 4
+    C 26 4, 4 26, 4 64
+    C 4 102, 26 124, 64 124
+    C 102 124, 124 102, 124 64
+    C 124 26, 102 4, 64 4 Z"
+    fill="url(#bg)"/>
+  <path d="
+    M64 4
+    C 26 4, 4 26, 4 64
+    C 4 102, 26 124, 64 124
+    C 102 124, 124 102, 124 64
+    C 124 26, 102 4, 64 4 Z"
+    fill="url(#sheen)"/>
+  <!-- subtle inner stroke for depth -->
+  <path d="
+    M64 6
+    C 27 6, 6 27, 6 64
+    C 6 101, 27 122, 64 122
+    C 101 122, 122 101, 122 64
+    C 122 27, 101 6, 64 6 Z"
+    fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="1"/>
+
+  <!-- Glyph: download arrow into tray, very Apple SF Symbols feel -->
+  <g fill="none" stroke="url(#glyph)" stroke-linecap="round" stroke-linejoin="round">
+    <!-- arrow shaft -->
+    <path d="M64 34 L64 78" stroke-width="9"/>
+    <!-- arrow head -->
+    <path d="M44 62 L64 82 L84 62" stroke-width="9"/>
+    <!-- tray base -->
+    <path d="M36 96 L92 96" stroke-width="9"/>
+  </g>
 </svg>
