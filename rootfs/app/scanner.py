@@ -66,7 +66,7 @@ IPA_DIR = DATA_DIR / "ipa"
 ICONS_DIR = DATA_DIR / "icons"
 REPO_JSON = DATA_DIR / "repo.json"
 CACHE_DB = DATA_DIR / ".scan_cache.json"
-ICON_EXTRACTOR_VERSION = "cgbi-v2"
+ICON_EXTRACTOR_VERSION = "cgbi-v3-flutter-deep"
 # ================
 
 def load_cache():
@@ -375,6 +375,48 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
                 candidates.append((5, -size, fpath))
             except Exception:
                 pass
+
+    # Pass 2b: Flutter / 通用深层图标 —— 按文件名兜底匹配。
+    # 例如 PiliPlus 把图标放在 flutter_assets/assets/images/logo/logo.png，
+    # 不在固定路径表里。这里扫遍所有 PNG，按文件名命中 logo/icon 关键字，
+    # 并按尺寸取最大，避免漏掉 Flutter / RN / Cordova 等框架的非标准图标位置。
+    deep_keywords = ("logo", "icon", "applogo", "app_logo", "appicon")
+    seen_deep = set()
+    for name in zf.namelist():
+        if not name.startswith(app_prefix):
+            continue
+        lower = name.lower()
+        if not lower.endswith(".png"):
+            continue
+        # 只看深层路径（根级 PNG 已在 Pass 1 处理）
+        rel = name[len(app_prefix):]
+        if "/" not in rel:
+            continue
+        if name in seen_deep:
+            continue
+        # 跳过明显不是 app 图标的（按钮、占位、动效素材等）
+        skip_markers = ("button", "btn", "placeholder", "loading", "splash",
+                        "background", "bg_", "/bg.", "banner", "/lv/", "/paycoins/",
+                        "thumb", "avatar", "/img/", "/images/play", "/images/ai")
+        if any(m in lower for m in skip_markers):
+            continue
+        stem = rel.rsplit("/", 1)[-1].rsplit(".", 1)[0].lower()
+        # 只接受 stem 本身就是 logo/icon 类关键词的，避免拿到 "logo_button" 这种
+        if stem not in deep_keywords and not any(stem.endswith(k) or stem.startswith(k) for k in ("logo", "appicon", "app_icon")):
+            continue
+        try:
+            size = zf.getinfo(name).file_size
+        except Exception:
+            continue
+        # 太小（< 4KB）多半不是合格图标
+        if size < 4096:
+            continue
+        # 深层 logo/icon ≥ 16KB 时，明显比根级 AppIcon 占位图更合适，
+        # 提到 priority=1（仅次于 CFBundleIconFiles 显式声明）。
+        # < 16KB 但 ≥ 4KB 时只作为兜底（priority=4）。
+        prio = 1 if size >= 16384 else 4
+        candidates.append((prio, -size, name))
+        seen_deep.add(name)
 
     # iTunesArtwork (no .png extension) -- highest priority, fallback
     for art_name in (f"{app_prefix}iTunesArtwork", "iTunesArtwork"):
