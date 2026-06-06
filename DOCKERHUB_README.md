@@ -52,7 +52,7 @@ services:
       - REPO_BASE_URL=https://your.domain.com/yourpath  # 公网订阅URL
       - REPO_NAME=My Private IPA Repo
       - REPO_IDENTIFIER=com.example.ipa.repo
-      - TG_PROXY=socks5://10.0.0.100:7893  # 可空，留空表示直连
+      - TG_PROXY=socks5://proxy.example.com:1080  # 可空，留空表示直连
       - TG_SCAN_CRON=0 1 * * *             # 每天凌晨1点扫描
       - TG_SCAN_HOURS=25                   # 回溯25小时
 ```
