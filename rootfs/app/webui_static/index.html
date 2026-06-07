@@ -1478,6 +1478,50 @@
       <div class="panel">
         <div class="panel-head">
           <div class="head-block">
+            <h2>软件源解锁码</h2>
+            <span x-text="unlockCfg.enabled ? (unlockCfg.expired ? '已过期' : '已启用') : '未启用'"></span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="muted" style="margin-bottom:10px; line-height:1.6">
+            订阅链接公开可分享；客户端（轻松签 / 全能签）添加源后，下载按钮变成"解锁"，输入此解锁码后才出现下载。
+          </div>
+          <div class="field">
+            <label>解锁码（4-32 位字母数字）</label>
+            <input x-model="unlockCfg.code" type="text" placeholder="例如 142536">
+          </div>
+          <div class="field">
+            <label>有效期</label>
+            <div class="preset-grid">
+              <template x-for="opt in unlockExpiresOptions" :key="opt.value">
+                <button type="button" class="btn sm" :class="{active: unlockCfg.expires===opt.value}" @click="unlockCfg.expires=opt.value" x-text="opt.label"></button>
+              </template>
+            </div>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <label class="checkline"><input type="checkbox" x-model="unlockCfg.enabled"> 启用</label>
+          </div>
+          <div class="status-line" style="margin-top:12px">
+            <span class="dot" :class="{on: unlockCfg.enabled && !unlockCfg.expired}"></span>
+            <span x-show="!unlockCfg.expires_at" x-text="unlockCfg.enabled ? '永久有效' : '未启用'"></span>
+            <span x-show="unlockCfg.expires_at && !unlockCfg.expired" x-cloak>
+              到期：<span x-text="formatExpires(unlockCfg.expires_at)"></span>
+              <span class="code" x-text="'剩余 ' + formatRemaining(unlockCfg.remaining_seconds)"></span>
+            </span>
+            <span x-show="unlockCfg.expired" x-cloak style="color:#e25c3a">已于 <span x-text="formatExpires(unlockCfg.expires_at)"></span> 过期</span>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" @click="saveUnlock()" :disabled="unlockSaving" x-text="unlockSaving ? '保存中' : '保存'"></button>
+          </div>
+          <div x-show="unlockResult" x-cloak class="result-box" :class="unlockResult && unlockResult.ok ? 'ok' : 'err'">
+            <div x-text="unlockResult && (unlockResult.msg || unlockResult.error)"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="head-block">
             <h2>代理</h2>
             <span x-text="proxyCfg.enabled ? '已启用' : '未启用'"></span>
           </div>
@@ -1682,6 +1726,17 @@ function ipaApp() {
     proxySaving: false,
     proxyTesting: false,
     proxyTestResult: null,
+    unlockCfg: { code: '', enabled: true, expires: 'never', expires_at: '', remaining_seconds: null, expired: false, token_preview: '', has_token: false },
+    unlockExpiresOptions: [
+      { value: 'never', label: '永久' },
+      { value: '1d', label: '1 天' },
+      { value: '7d', label: '7 天' },
+      { value: '30d', label: '30 天' },
+      { value: '90d', label: '90 天' },
+      { value: '365d', label: '1 年' },
+    ],
+    unlockSaving: false,
+    unlockResult: null,
 
     async init() {
       this.workspace = normalizeWorkspace(localStorage.getItem('ipa-workspace') || 'apps');
@@ -1695,7 +1750,7 @@ function ipaApp() {
       } finally {
         this.loading = false;
       }
-      await Promise.allSettled([this.loadProxy(), this.loadBot(), this.loadAccount()]);
+      await Promise.allSettled([this.loadProxy(), this.loadBot(), this.loadAccount(), this.loadUnlock()]);
       setInterval(() => {
         if (this.workspace === 'logs' && this.autoRefresh) this.loadLog();
         if (this.workspace === 'apps') this.loadStatus();
@@ -2188,6 +2243,72 @@ function ipaApp() {
         this.botTestResult = { ok: false, error: e.message };
       }
       this.botTesting = false;
+    },
+
+    async loadUnlock() {
+      try {
+        const r = await this.api('GET', '/api/unlock');
+        // 从 expires_at 反推 preset；找不到就标 custom
+        let preset = 'never';
+        if (r.expires_at && r.remaining_seconds && r.remaining_seconds > 0) {
+          const days = Math.round(r.remaining_seconds / 86400);
+          const map = { 1: '1d', 7: '7d', 30: '30d', 90: '90d', 365: '365d' };
+          preset = map[days] || 'custom';
+        }
+        this.unlockCfg = {
+          code: r.code || '',
+          enabled: r.enabled !== false,
+          expires: preset,
+          expires_at: r.expires_at || '',
+          remaining_seconds: r.remaining_seconds,
+          expired: !!r.expired,
+          token_preview: r.token_preview || '',
+          has_token: r.has_token,
+        };
+      } catch (e) {}
+    },
+
+    async saveUnlock() {
+      const code = (this.unlockCfg.code || '').trim();
+      if (this.unlockCfg.enabled && !/^[A-Za-z0-9]{4,32}$/.test(code)) {
+        this.showToast('解锁码需 4-32 位字母数字', 'err');
+        return;
+      }
+      this.unlockSaving = true;
+      this.unlockResult = null;
+      try {
+        const r = await this.api('PUT', '/api/unlock', {
+          enabled: this.unlockCfg.enabled,
+          code,
+          expires: this.unlockCfg.expires || 'never',
+        });
+        this.unlockResult = { ok: true, msg: r.msg || '已保存' };
+        this.showToast(r.msg || '已保存');
+        await this.loadUnlock();
+      } catch (e) {
+        this.unlockResult = { ok: false, error: e.message };
+      }
+      this.unlockSaving = false;
+    },
+
+    formatExpires(iso) {
+      if (!iso) return '';
+      try {
+        const d = new Date(iso);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      } catch (e) { return iso; }
+    },
+
+    formatRemaining(sec) {
+      if (sec == null) return '';
+      if (sec <= 0) return '0';
+      const days = Math.floor(sec / 86400);
+      const hours = Math.floor((sec % 86400) / 3600);
+      const mins = Math.floor((sec % 3600) / 60);
+      if (days >= 1) return `${days} 天 ${hours} 小时`;
+      if (hours >= 1) return `${hours} 小时 ${mins} 分钟`;
+      return `${mins} 分钟`;
     },
 
     async loadProxy() {

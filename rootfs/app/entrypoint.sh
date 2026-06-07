@@ -85,24 +85,52 @@ PY_TOKEN
 export IPA_ACCESS_TOKEN="$ACCESS_TOKEN"
 echo "🔐 访问 token 已启用（值不输出）"
 
-if [ "$UNLOCK_ENABLED" = "True" ] && [ -n "$UNLOCK_CODE" ]; then
-    REPO_PATH="$UNLOCK_CODE"
-    echo "🔐 解锁码已启用: /$REPO_PATH"
-else
-    # 兼容旧逻辑：从 REPO_BASE_URL 提取末段；否则用 repo
-    REPO_PATH=$(echo "$REPO_BASE_URL" | sed -E 's|^https?://[^/]+/?||; s|/$||' | awk -F/ '{print $NF}')
-    [ -z "$REPO_PATH" ] && REPO_PATH="repo"
-    echo "🔓 解锁码已禁用，路径: /$REPO_PATH"
-fi
-# 同步 REPO_BASE_URL 末段（让 scanner.py 生成正确的 downloadURL）
+# 路径段：URL 与解锁码彻底解耦。REPO_PATH 仅来自 REPO_BASE_URL 自身路径段；
+# 解锁码（unlock.json.code）不再出现在 URL 中，仅由 /auth 校验。
+# 允许 REPO_BASE_URL 形如 https://host 或 https://host/seg。空路径=订阅入口走根 /。
 _BASE_HOST=$(echo "$REPO_BASE_URL" | sed -E 's|(https?://[^/]+).*|\1|')
-export REPO_BASE_URL="$_BASE_HOST/$REPO_PATH"
-echo "🔗 Nginx 入口路径: /$REPO_PATH"
-echo "📦 重写后的 REPO_BASE_URL: $REPO_BASE_URL"
+REPO_PATH=$(echo "$REPO_BASE_URL" | sed -E 's|^https?://[^/]+/?||; s|/$||')
+if [ -z "$REPO_PATH" ]; then
+    export REPO_BASE_URL="$_BASE_HOST"
+    echo "🔗 Nginx 入口路径: /  （根路径直发 repo.json）"
+else
+    export REPO_BASE_URL="$_BASE_HOST/$REPO_PATH"
+    echo "🔗 Nginx 入口路径: /$REPO_PATH"
+fi
+echo "📦 最终 REPO_BASE_URL: $REPO_BASE_URL"
+if [ "$UNLOCK_ENABLED" = "True" ] && [ -n "$UNLOCK_CODE" ]; then
+    echo "🔐 解锁码已启用（仅 /auth 校验，不写入 URL）"
+else
+    echo "🔓 解锁码已禁用"
+fi
 
 # 用最终 REPO_BASE_URL 重写 cron（让定时扫描的 scanner 用对的 URL）
 write_cron_file
 echo "✅ Cron 已用最终 REPO_BASE_URL 重写"
+
+# REPO_PATH 可能为空（订阅入口=根）。生成 nginx location 时区分处理。
+if [ -z "$REPO_PATH" ]; then
+    SUB_LOCATION='location = / {'
+    SUB_BODY_OVERRIDE='yes'
+    IPA_LOCATION='location ^~ /ipa/ {'
+    ICONS_LOCATION='location ^~ /icons/ {'
+    AUTH_LOCATION='location = /auth {'
+    ROOT_FALLBACK=''   # 根已经是订阅入口，不再屏蔽
+else
+    SUB_LOCATION="location = /$REPO_PATH {"
+    SUB_BODY_OVERRIDE='no'
+    IPA_LOCATION="location ^~ /$REPO_PATH/ipa/ {"
+    ICONS_LOCATION="location ^~ /$REPO_PATH/icons/ {"
+    AUTH_LOCATION="location = /$REPO_PATH/auth {"
+    ROOT_FALLBACK='location = / { return 404; }'
+fi
+
+# 订阅入口的 location body：根路径下 alias 单文件会 500，改用 root+rewrite。
+if [ "$SUB_BODY_OVERRIDE" = "yes" ]; then
+    SUB_BODY='default_type application/json; root /data; rewrite ^ /repo.json break;'
+else
+    SUB_BODY='default_type application/json; alias /data/repo.json;'
+fi
 
 cat > /etc/nginx/conf.d/server.conf <<NGX_EOF
 server {
@@ -120,32 +148,30 @@ server {
     }
 
     # 订阅入口：无扩展名URL返回 repo.json（Esign要求）
-    location = /$REPO_PATH {
-        if (\$arg_token != "$ACCESS_TOKEN") { return 403; }
-        default_type application/json;
-        alias /data/repo.json;
+    $SUB_LOCATION
+        $SUB_BODY
     }
 
-    # IPA 下载
-    location ^~ /$REPO_PATH/ipa/ {
-        if (\$arg_token != "$ACCESS_TOKEN") { return 403; }
+    # IPA 下载（URL 与解锁码已解耦；可见性由 /auth 控制）
+    $IPA_LOCATION
         alias /data/ipa/;
-        autoindex on;
-        autoindex_exact_size off;
-        autoindex_localtime on;
+        autoindex off;
     }
 
     # 图标下载
-    location ^~ /$REPO_PATH/icons/ {
+    $ICONS_LOCATION
         alias /data/icons/;
         autoindex on;
         autoindex_exact_size off;
         autoindex_localtime on;
+        # 强制客户端每次重新校验 ETag/Last-Modified，避免轻松签 / 全能签按 URL 缓存旧占位图。
+        # 图标 URL 自带 ?v=mtime-size，正常更新时会变；这里再加 no-cache 兜底冷缓存。
+        add_header Cache-Control "no-cache, must-revalidate" always;
     }
 
-    # 软件源解锁验证接口：Esign/轻松签点“解锁”后会把 udid + code POST 到这里。
+    # 软件源解锁验证接口：Esign/轻松签点"解锁"后会把 udid + code POST 到这里。
     # 这里反代到 WebUI 后端 /auth，不需要 WebUI 登录 Cookie，只校验 unlock.json 里的解锁码。
-    location = /$REPO_PATH/auth {
+    $AUTH_LOCATION
         proxy_pass http://127.0.0.1:8085/auth;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -160,8 +186,8 @@ server {
         add_header Content-Disposition "attachment" always;
     }
 
-    # 默认根路径屏蔽
-    location = / { return 404; }
+    # 默认根路径屏蔽（仅当订阅入口不是根时启用）
+    $ROOT_FALLBACK
     location / { return 404; }
 }
 NGX_EOF

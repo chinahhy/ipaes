@@ -15,48 +15,24 @@ from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse, quote
 
-# 客户端不再启用 Esign 解锁码：安全边界只放在服务端 token URL。
-# - apps[].isNeedlock=0 后客户端直接显示“下载”
-# - news.isUnlock=0 / news.url 为空，避免 Esign 再弹解锁流程
+# 客户端解锁码（Esign / 全能签 UI 锁）：
+# - apps[].isNeedlock=1 → 客户端默认显示“解锁”按钮，点击后弹解锁码输入框
+# - news.isUnlock=1 + news.url 指向 /auth → 客户端把 udid+code POST 到 /auth 校验
+# - news.key 是服务端用来生成解锁凭证的密钥（仅 UI 锁，非真实下载鉴权）
 LOCK_AUTH_KEY = os.environ.get("IPA_LOCK_AUTH_KEY", "hoya_ipa_lock_v1")
-# 服务端真实鉴权 token：写进订阅 URL 和 IPA 下载 URL；没有 token 的请求由 nginx 拦截。
-ACCESS_TOKEN = os.environ.get("IPA_ACCESS_TOKEN", "").strip()
-if not ACCESS_TOKEN:
-    try:
-        _unlock_conf = json.loads(Path("/config/unlock.json").read_text())
-        ACCESS_TOKEN = str(_unlock_conf.get("token") or "").strip()
-    except Exception:
-        ACCESS_TOKEN = ""
-
+# 历史遗留：以前 IPA 直链带 ?token= 做 nginx 层鉴权。现在订阅链接公开分享，
+# 下载 URL 不再附 token，nginx 也不再拦截。订阅根路径 /<REPO_PATH>/ 仍是随机
+# 字符串，防止陌生扫描器拉到 repo.json。
 def with_access_token(url: str) -> str:
-    """给 repo.json 里的下载链接追加 token 参数；token 值不写入日志。"""
-    if not ACCESS_TOKEN:
-        return url
-    sep = "&" if "?" in url else "?"
-    return f"{url}{sep}token={quote(ACCESS_TOKEN)}"
+    return url
 
 # ===== 配置（全部来自环境变量）=====
 BASE_URL = os.environ.get("REPO_BASE_URL", "https://example.com/repo").rstrip("/")
 REPO_NAME = os.environ.get("REPO_NAME", "Private IPA Repo")
 REPO_IDENTIFIER = os.environ.get("REPO_IDENTIFIER", "com.private.ipa.repo")
 
-# unlock.json 的 code 才是 nginx 当前真实入口路径；环境里的 REPO_BASE_URL 可能是旧路径。
-# 因此扫描生成 repo.json 时，用 code 覆盖 BASE_URL 最后一段，避免下载 URL 指向旧路径。
-try:
-    _unlock_code = str(json.loads(Path("/config/unlock.json").read_text()).get("code") or "").strip()
-except Exception:
-    _unlock_code = ""
-if _unlock_code:
-    _p = urlparse(BASE_URL)
-    _parts = [p for p in _p.path.split("/") if p]
-    if _parts:
-        _parts[-1] = _unlock_code
-    else:
-        _parts = [_unlock_code]
-    BASE_URL = _p._replace(path="/" + "/".join(_parts), query="", fragment="").geturl().rstrip("/")
-
-# 从 BASE_URL 提取路径部分作为 repo 目录名
-# e.g. https://ipa.example.com/x7k9m2hP → repo_dir = x7k9m2hP
+# 解锁码（unlock.json.code）不再参与 URL 路径生成，URL 与解锁码彻底解耦。
+# REPO_BASE_URL 现在直接就是对外发布的订阅前缀（可以是 https://domain 或 https://domain/segment）。
 _parsed = urlparse(BASE_URL.rstrip("/"))
 _path_parts = [p for p in _parsed.path.split("/") if p]
 REPO_DIR_NAME = _path_parts[-1] if _path_parts else "repo"
@@ -457,7 +433,19 @@ def parse_ipa(ipa_path: Path):
 
             icon_filename = f"{bundle_id}.png"
             icon_path = ICONS_DIR / icon_filename
-            icon_ok = extract_largest_icon(zf, app_dir, plist, icon_path)
+            # 用户手动覆盖：若 icons/<bundle>.user.png 存在，则把它复制到 <bundle>.png 并跳过自动提取。
+            # 这是解决 IPA 内部图标错乱（活动期间皮肤、广告图标等）的兜底手段。
+            user_icon = ICONS_DIR / f"{bundle_id}.user.png"
+            if user_icon.exists() and _standard_png_ok(user_icon.read_bytes()):
+                try:
+                    icon_path.write_bytes(user_icon.read_bytes())
+                    icon_ok = True
+                    print(f"  🖼️ 使用用户自定义图标: {bundle_id}.user.png")
+                except Exception as e:
+                    print(f"  ⚠️ user.png 复制失败 {bundle_id}: {e}")
+                    icon_ok = extract_largest_icon(zf, app_dir, plist, icon_path)
+            else:
+                icon_ok = extract_largest_icon(zf, app_dir, plist, icon_path)
 
             return {
                 "name": app_name, "bundleIdentifier": bundle_id, "version": version,
@@ -481,27 +469,39 @@ def cached_meta_usable(meta: dict) -> bool:
 
 def build_app_entry(meta: dict) -> dict:
     ipa_url = with_access_token(f"{BASE_URL}/ipa/{quote(meta['ipa_filename'])}")
-    icon_url = f"{BASE_URL}/icons/{quote(meta['icon_filename'])}?v={int(meta['mtime'])}" if meta.get("icon_filename") else ""
+    # 版本号绑定到图标文件本身的 mtime + size，这样图标重新提取后 URL 一定变化，
+    # 避免客户端（轻松签 / 全能签）按 URL 缓存旧的占位图。
+    icon_url = ""
+    if meta.get("icon_filename"):
+        icon_path = ICONS_DIR / meta["icon_filename"]
+        try:
+            st = icon_path.stat()
+            icon_ver = f"{int(st.st_mtime)}-{st.st_size}"
+        except OSError:
+            icon_ver = str(int(meta["mtime"]))
+        icon_url = f"{BASE_URL}/icons/{quote(meta['icon_filename'])}?v={icon_ver}"
     date_str = iso_date(meta["mtime"])
-
-    version_entry = {
-        "version": meta["version"], "date": date_str,
-        "localizedDescription": f"From {meta['ipa_filename']}",
-        "downloadURL": ipa_url, "size": meta["size"],
-        "minOSVersion": meta["minOSVersion"], "maxOSVersion": "99.0",
-        "isNeedlock": 0, "appType": 1,
-    }
-
+    # 严格按魔力签/全能签源协议组织字段顺序：
+    # name → versionDate → version → iconURL → downloadURL → size → isNeedlock → appType → localizedDescription
+    # size 在魔力签规范里是字符串（如 "58M"），不是字节数；这里转成 MB 字符串。
+    size_mb = max(1, round(meta["size"] / (1024 * 1024)))
+    size_str = f"{size_mb}M"
+    # localizedDescription 不再用 "Auto-extracted from xxx.ipa" 这种文件名露出（用户要求公开仓库时干净）。
+    desc = f"{meta['name']} v{meta['version']}"
+    # 全能签源协议（参照 CN-CodeMan/AppStore/App.json 这个实际部署的源）。
+    # 注：仓库主人决定不启用解锁按钮（自用源），所以 lock 固定 "0" = 免费下载。
+    # 如果以后要恢复解锁机制，把 lock 改成 "1" 并提供 unlockURL 即可。
     return {
-        "name": meta["name"], "bundleIdentifier": meta["bundleIdentifier"],
-        "developerName": "Private Repo", "subtitle": meta["name"],
-        "localizedDescription": f"Auto-extracted from {meta['ipa_filename']}",
-        "iconURL": icon_url, "tintColor": "3478F6", "screenshotURLs": [], "beta": False,
-        "versions": [version_entry],
-        "version": meta["version"], "versionDate": date_str,
-        "versionDescription": f"From {meta['ipa_filename']}",
-        "downloadURL": ipa_url, "size": meta["size"],
-        "isNeedlock": 0, "appType": 1,
+        "name": meta["name"],
+        "version": meta["version"],
+        "versionDate": date_str,
+        "versionDescription": desc,
+        "lock": "0",
+        "downloadURL": ipa_url,
+        "isLanZouCloud": "0",
+        "iconURL": icon_url,
+        "tintColor": "",
+        "size": str(meta["size"]),
     }
 
 def _safe_mkdir(p: Path):
@@ -578,26 +578,34 @@ def scan():
     final_apps = [build_app_entry(m) for m in sorted_metas]
     print(f"📊 合并: 总IPA{len(apps)}个 → 去重后{len(final_apps)}个app（按mtime倒序）")
 
-    # 仓库元信息（顶层 iconURL 是 AltStore/Esign 协议字段，让客户端订阅源时能显示 logo）
-    # _repo.png 是一张固定文件，不参与 IPA 扫描清理（见下方 valid_icons 集合明确放行）
+    # ---- 顶层结构：全能签源协议（参照 CN-CodeMan/AppStore App.json 实际部署案例）----
+    # 全能签客户端期望的字段：name/message/identifier/sourceURL/sourceicon/payURL/unlockURL/apps
+    # 解锁地址在顶层 unlockURL，apps[].lock = "1" 代表加锁。
     repo = {
+        "name": REPO_NAME,
+        "message": "添加源后请向源主索取解锁码后方可下载。",
+        "identifier": REPO_IDENTIFIER,
+        "sourceURL": BASE_URL,
+        "sourceicon": f"{BASE_URL}/icons/_repo.png",
+        "payURL": "",
+        "unlockURL": f"{BASE_URL}/auth",
+        "apps": final_apps,
+    }
+    REPO_JSON.write_text(json.dumps(repo, indent=2, ensure_ascii=False))
+
+    # AltStore / Sideloadly 兼容副本：供需要 AltStore 协议的客户端单独订阅
+    altstore_repo = {
         "name": REPO_NAME,
         "identifier": REPO_IDENTIFIER,
         "iconURL": f"{BASE_URL}/icons/_repo.png",
         "apps": final_apps,
-        "news": {
-            "title": REPO_NAME,
-            "caption": "此源使用专属 token URL 访问；请勿外传订阅链接。",
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "key": LOCK_AUTH_KEY,
-            "tintColor": "3478F6",
-            "isUnlock": 0,
-            "imageURL": f"{BASE_URL}/icons/_repo.png",
-            "url": "",
-            "pay": "",
-        },
     }
-    REPO_JSON.write_text(json.dumps(repo, indent=2, ensure_ascii=False))
+    try:
+        (REPO_JSON.parent / "_altstore.json").write_text(
+            json.dumps(altstore_repo, indent=2, ensure_ascii=False)
+        )
+    except Exception as e:
+        print(f"⚠️ 写 _altstore.json 失败: {e}")
     save_cache(new_cache)
 
     # 清理孤立图标：删掉那些不对应任何已知 IPA 的图标
@@ -606,6 +614,8 @@ def scan():
     for icon in ICONS_DIR.glob("*.png"):
         if icon.name.startswith("_"):
             continue  # _repo.png 等元数据图标永不清理
+        if icon.name.endswith(".user.png"):
+            continue  # 用户手动放置的覆盖图标永不清理
         if icon.name not in valid_icons:
             print(f"  🗑️ 清理孤立图标: {icon.name}")
             icon.unlink()

@@ -509,11 +509,25 @@ def api_get_unlock():
     enabled = conf.get("enabled", True)
     token = str(conf.get("token") or "").strip()
     token_preview = f"{token[:4]}...{token[-4:]}" if len(token) > 8 else "(未设置)"
+    expires_at = conf.get("code_expires_at")  # ISO 字符串或 None；None / "" 表示永久
+    now_ts = time.time()
+    expired = False
+    remaining_seconds = None
+    if expires_at:
+        try:
+            exp_dt = datetime.fromisoformat(expires_at)
+            remaining_seconds = int(exp_dt.timestamp() - now_ts)
+            expired = remaining_seconds <= 0
+        except Exception:
+            expires_at = None
     return jsonify({
         "enabled": enabled,
         "code": code,
         "token_preview": token_preview,
         "has_token": bool(token),
+        "expires_at": expires_at or "",
+        "remaining_seconds": remaining_seconds,
+        "expired": expired,
     })
 
 @app.route("/api/unlock", methods=["DELETE"])
@@ -540,6 +554,20 @@ def api_set_unlock():
     if enabled:
         if not code or not code.isalnum() or len(code) < 4 or len(code) > 32:
             return jsonify({"error": "code 必须 4-32 位字母数字"}), 400
+    # 有效期：accept "never" / "1d" / "7d" / "30d" / "90d" / ISO 字符串
+    expires_raw = (data.get("expires") or "").strip()
+    expires_at_iso = ""
+    if expires_raw and expires_raw.lower() != "never":
+        presets = {"1d": 1, "7d": 7, "30d": 30, "90d": 90, "365d": 365}
+        if expires_raw in presets:
+            exp_dt = datetime.now() + timedelta(days=presets[expires_raw])
+            expires_at_iso = exp_dt.replace(microsecond=0).isoformat()
+        else:
+            try:
+                exp_dt = datetime.fromisoformat(expires_raw)
+                expires_at_iso = exp_dt.replace(microsecond=0).isoformat()
+            except Exception:
+                return jsonify({"error": "expires 必须为 never/1d/7d/30d/90d/365d 或 ISO 时间"}), 400
     p = Path("/config/unlock.json")
     old_conf = {}
     if p.exists():
@@ -548,9 +576,9 @@ def api_set_unlock():
         except Exception:
             old_conf = {}
     new_conf = dict(old_conf)
-    new_conf.update({"enabled": enabled, "code": code})
+    new_conf.update({"enabled": enabled, "code": code, "code_expires_at": expires_at_iso})
     p.write_text(json.dumps(new_conf, ensure_ascii=False, indent=2))
-    return jsonify({"ok": True, "msg": "已保存。需要重启容器生效（点右上 ↻ 重启按钮）"})
+    return jsonify({"ok": True, "msg": "已保存，立即生效。"})
 
 @app.route("/auth", methods=["GET", "POST"])
 def esign_unlock_auth():
@@ -565,12 +593,25 @@ def esign_unlock_auth():
     got = (request.values.get("code") or request.values.get("password") or "").strip()
     udid = (request.values.get("udid") or request.values.get("UDID") or "").strip()
     lock_key = os.environ.get("IPA_LOCK_AUTH_KEY", "hoya_ipa_lock_v1")
-    if not expected or got != expected:
-        return jsonify({"code": 1, "msg": "解锁码错误", "data": ""}), 403
+    # 魔力签/全能签 README 规定的响应格式：仅 data + msg 两个字段，不带 code。
+    # 成功: {"data": md5(key+udid), "msg": "解锁成功"}
+    # 失败: {"data": md5(udid),     "msg": "<原因>"}
+    udid_for_fail = udid or "unknown"
+    fail_data = hashlib.md5(udid_for_fail.encode("utf-8")).hexdigest()
+    # 有效期校验：过期立刻拒绝
+    expires_at = conf.get("code_expires_at")
+    if expires_at:
+        try:
+            if datetime.fromisoformat(expires_at).timestamp() <= time.time():
+                return jsonify({"data": fail_data, "msg": "解锁码已过期，请联系源主获取新解锁码"})
+        except Exception:
+            pass
     if not udid:
-        return jsonify({"code": 2, "msg": "缺少 UDID", "data": ""}), 400
+        return jsonify({"data": fail_data, "msg": "缺少 UDID"})
+    if not expected or got != expected:
+        return jsonify({"data": fail_data, "msg": "解锁码错误"})
     digest = hashlib.md5((lock_key + udid).encode("utf-8")).hexdigest()
-    return jsonify({"code": 0, "msg": "解锁成功", "data": digest})
+    return jsonify({"data": digest, "msg": "解锁成功"})
 
 # ============ API: 修改 WebUI 密码 ============
 def _valid_username(username: str) -> bool:
