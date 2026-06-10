@@ -494,6 +494,13 @@ def api_get_log(name):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ============ API: 软件源信息 ============
+@app.route("/api/repo_info", methods=["GET"])
+@require_auth
+def api_repo_info():
+    repo_url = os.environ.get("REPO_BASE_URL", "").strip().rstrip("/")
+    return jsonify({"repo_url": repo_url, "repo_name": os.environ.get("REPO_NAME", ""), "repo_identifier": os.environ.get("REPO_IDENTIFIER", "")})
+
 # ============ API: 解锁码（保留后端逻辑供 nginx/订阅用，只删前端 tab） ============
 @app.route("/api/unlock", methods=["GET"])
 @require_auth

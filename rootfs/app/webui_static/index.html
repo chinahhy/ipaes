@@ -1478,43 +1478,24 @@
       <div class="panel">
         <div class="panel-head">
           <div class="head-block">
-            <h2>软件源解锁码</h2>
-            <span x-text="unlockCfg.enabled ? (unlockCfg.expired ? '已过期' : '已启用') : '未启用'"></span>
+            <h2>软件源地址</h2>
+            <span x-text="repoInfo.url ? '已配置' : '未配置'"></span>
           </div>
         </div>
         <div class="panel-body">
           <div class="muted" style="margin-bottom:10px; line-height:1.6">
-            订阅链接公开可分享；客户端（轻松签 / 全能签）添加源后，下载按钮变成"解锁"，输入此解锁码后才出现下载。
+            在客户端（轻松签 / 全能签 / AltStore）添加此地址即可订阅 IPA 源。点击复制按钮一键获取。
           </div>
-          <div class="field">
-            <label>解锁码（4-32 位字母数字）</label>
-            <input x-model="unlockCfg.code" type="text" placeholder="例如 142536">
-          </div>
-          <div class="field">
-            <label>有效期</label>
-            <div class="preset-grid">
-              <template x-for="opt in unlockExpiresOptions" :key="opt.value">
-                <button type="button" class="btn sm" :class="{active: unlockCfg.expires===opt.value}" @click="unlockCfg.expires=opt.value" x-text="opt.label"></button>
-              </template>
+          <div class="field" style="position:relative">
+            <label>订阅地址</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input :value="repoInfo.url" readonly style="flex:1;cursor:text;font-family:monospace,Consolas,'Courier New',monospace;font-size:13px" @click="$event.target.select()">
+              <button type="button" class="btn primary sm" style="flex:0 0 auto;white-space:nowrap" @click="copyRepoUrl()" :disabled="!repoInfo.url" x-text="repoUrlCopied ? '✓ 已复制' : '复制'"></button>
             </div>
           </div>
-          <div class="actions" style="margin-top:10px">
-            <label class="checkline"><input type="checkbox" x-model="unlockCfg.enabled"> 启用</label>
-          </div>
           <div class="status-line" style="margin-top:12px">
-            <span class="dot" :class="{on: unlockCfg.enabled && !unlockCfg.expired}"></span>
-            <span x-show="!unlockCfg.expires_at" x-text="unlockCfg.enabled ? '永久有效' : '未启用'"></span>
-            <span x-show="unlockCfg.expires_at && !unlockCfg.expired" x-cloak>
-              到期：<span x-text="formatExpires(unlockCfg.expires_at)"></span>
-              <span class="code" x-text="'剩余 ' + formatRemaining(unlockCfg.remaining_seconds)"></span>
-            </span>
-            <span x-show="unlockCfg.expired" x-cloak style="color:#e25c3a">已于 <span x-text="formatExpires(unlockCfg.expires_at)"></span> 过期</span>
-          </div>
-          <div class="actions">
-            <button type="button" class="btn primary" @click="saveUnlock()" :disabled="unlockSaving" x-text="unlockSaving ? '保存中' : '保存'"></button>
-          </div>
-          <div x-show="unlockResult" x-cloak class="result-box" :class="unlockResult && unlockResult.ok ? 'ok' : 'err'">
-            <div x-text="unlockResult && (unlockResult.msg || unlockResult.error)"></div>
+            <span class="dot" :class="{on: !!repoInfo.url}"></span>
+            <span x-text="repoInfo.url ? '源在线' : '未配置 REPO_BASE_URL'"></span>
           </div>
         </div>
       </div>
@@ -1737,6 +1718,8 @@ function ipaApp() {
     ],
     unlockSaving: false,
     unlockResult: null,
+    repoInfo: { url: '' },
+    repoUrlCopied: false,
 
     async init() {
       this.workspace = normalizeWorkspace(localStorage.getItem('ipa-workspace') || 'apps');
@@ -1750,7 +1733,7 @@ function ipaApp() {
       } finally {
         this.loading = false;
       }
-      await Promise.allSettled([this.loadProxy(), this.loadBot(), this.loadAccount(), this.loadUnlock()]);
+      await Promise.allSettled([this.loadProxy(), this.loadBot(), this.loadAccount(), this.loadUnlock(), this.loadRepoInfo()]);
       setInterval(() => {
         if (this.workspace === 'logs' && this.autoRefresh) this.loadLog();
         if (this.workspace === 'apps') this.loadStatus();
@@ -2266,6 +2249,30 @@ function ipaApp() {
           has_token: r.has_token,
         };
       } catch (e) {}
+    },
+
+    async loadRepoInfo() {
+      try {
+        const r = await this.api('GET', '/api/repo_info');
+        this.repoInfo = { url: r.repo_url || '' };
+      } catch (e) {}
+    },
+
+    async copyRepoUrl() {
+      if (!this.repoInfo.url) return;
+      try {
+        await navigator.clipboard.writeText(this.repoInfo.url);
+        this.repoUrlCopied = true;
+        this.showToast('已复制到剪贴板');
+        setTimeout(() => { this.repoUrlCopied = false; }, 2000);
+      } catch (e) {
+        // Fallback for older browsers
+        const input = document.querySelector('[readonly][x-ref="repoUrlInput"]');
+        if (input) { input.select(); document.execCommand('copy'); }
+        this.showToast('已复制到剪贴板');
+        this.repoUrlCopied = true;
+        setTimeout(() => { this.repoUrlCopied = false; }, 2000);
+      }
     },
 
     async saveUnlock() {
