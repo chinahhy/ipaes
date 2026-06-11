@@ -4,20 +4,20 @@ services:
     container_name: ipa-self-host
     restart: unless-stopped
     ports:
-      - "8080:80"                                # 宿主机:8080 → 容器:80（Esign订阅入口）
+      - "${HOST_PORT_NGINX:-8080}:80"
+      - "${HOST_PORT_WEBUI:-8085}:8085"
     volumes:
-      - ./config:/config                         # TG api凭证 + 白名单 + state.json
-      - ./session:/session                       # TG 登录态（首次登录后生成，权限600）
-      - ./logs:/logs                             # 所有进程日志（nginx/scanner/cron）
-      - ./data:/data                             # repo.json 自动生成在这里
-      # 下面两行：把宿主机的IPA和图标目录挂到容器（按需替换为你自己的路径）
-      - /path/to/your/ipa-repo/ipa:/data/ipa      # IPA文件存放
-      - /path/to/your/ipa-repo/icons:/data/icons  # 自动提取的App图标
+      - ./config:/config
+      - ./session:/session
+      - ./logs:/logs
+      - ./data:/data
+      - ${IPA_DIR:-./data/ipa}:/data/ipa
+      - ${ICONS_DIR:-./data/icons}:/data/icons
     environment:
-      - TZ=Asia/Shanghai                         # 时区，影响日志时间戳和cron触发时间
-      - REPO_BASE_URL=https://your-domain.example.com/your-path   # 公网订阅URL（决定nginx路径+下载链接前缀）
-      - REPO_NAME=My Private IPA Repo            # Esign里显示的源名称
-      - REPO_IDENTIFIER=com.example.private.repo # 源的BundleId（AltStore标准，唯一标识）
-      - TG_PROXY=socks5://127.0.0.1:1080         # TG代理（NAS连不上TG则必填，格式 socks5://host:port）
-      - TG_SCAN_CRON=0 1 * * *                   # TG扫描时间（cron表达式，默认每天凌晨1点）
-      - TG_SCAN_HOURS=25                         # 回溯小时数（24h+1h缓冲，防漏消息）
+      - REPO_BASE_URL=${REPO_BASE_URL:?REPO_BASE_URL is required}
+      - REPO_NAME=${REPO_NAME:-Private IPA Repo}
+      - REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}
+      - TG_PROXY=${TG_PROXY:-}
+      - TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}
+      - TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}
+      - TZ=${TZ:-Asia/Shanghai}

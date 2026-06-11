@@ -8,7 +8,8 @@ logs/
 *.tar
 *.tar.gz
 
-# 系统
+# 本地环境配置（含真实密钥/代理，不进仓库）
+.env
 .DS_Store
 *.swp
 *.pyc
