@@ -56,5 +56,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # cache-from 不写 ignore-error，让缓存读失败时悄悄绕过；
+          # cache-to 加 ignore-error=true：GHA cache 抽风导出失败不再让整个 build 失败。
+          # 实际镜像已经推到 DockerHub，缓存只是加速用，丢了下次重建即可。
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
