@@ -781,6 +781,70 @@
     border-color:rgba(91,140,255,.24);
   }
 
+  /* 破解点 highlights */
+  .version-highlights {
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:8px;
+    align-items:center;
+  }
+  .highlight-tag {
+    display:inline-flex;
+    align-items:center;
+    padding:3px 9px;
+    border-radius:999px;
+    font-size:11px;
+    line-height:1.5;
+    background:var(--accent-soft);
+    color:var(--accent);
+    border:1px solid rgba(91,140,255,.22);
+  }
+  .highlight-empty {
+    font-size:11px;
+    color:var(--muted);
+  }
+  .btn.ghost.xs,
+  .btn.xs {
+    padding:2px 8px;
+    font-size:11px;
+    border-radius:8px;
+  }
+
+  /* 描述编辑 modal */
+  .modal-mask {
+    position:fixed; inset:0;
+    background:rgba(0,0,0,.45);
+    display:flex; align-items:center; justify-content:center;
+    z-index:1000;
+    padding:16px;
+  }
+  .modal-card {
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    width:min(560px, 100%);
+    max-height:88vh;
+    overflow:auto;
+    box-shadow:0 24px 50px rgba(0,0,0,.32);
+  }
+  .modal-card header {
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .modal-card header h3 { margin:0; font-size:15px }
+  .modal-card .modal-body { padding:14px 18px; display:flex; flex-direction:column; gap:12px }
+  .modal-card footer {
+    padding:12px 18px;
+    border-top:1px solid var(--line);
+    display:flex; justify-content:flex-end; gap:8px;
+  }
+  .modal-card textarea {
+    width:100%; min-height:120px; resize:vertical;
+    font-family:inherit; font-size:13px; line-height:1.55;
+  }
+
   .grid {
     display:grid;
     gap:14px;
@@ -1287,6 +1351,16 @@
                         <span class="bad-badge" x-show="v.scan_status==='invalid'" x-cloak>损坏</span>
                         <span class="bad-badge warn" x-show="v.scan_status==='unscanned'" x-cloak>未入库</span>
                       </div>
+                      <div class="version-highlights" x-show="(v.highlights || []).length" x-cloak>
+                        <template x-for="h in (v.highlights || [])" :key="h">
+                          <span class="highlight-tag" x-text="h"></span>
+                        </template>
+                        <button type="button" class="btn ghost xs" @click.stop="openDescEditor(v)" title="编辑这条破解点说明">编辑</button>
+                      </div>
+                      <div class="version-highlights muted" x-show="!(v.highlights || []).length" x-cloak>
+                        <span class="highlight-empty">暂无破解点说明</span>
+                        <button type="button" class="btn ghost xs" @click.stop="openDescEditor(v)" title="手动补充破解点说明">补充</button>
+                      </div>
                     </div>
                     <div class="version-actions">
                       <button type="button" class="btn sm icon" @click.stop="downloadIpa(v)" :disabled="v.downloadable===false" title="下载" aria-label="下载">
@@ -1497,6 +1571,23 @@
             <span class="dot" :class="{on: !!repoInfo.url}"></span>
             <span x-text="repoInfo.url ? '源在线' : '未配置 REPO_BASE_URL'"></span>
           </div>
+          <div class="field" style="margin-top:16px">
+            <label>访问鉴权码 <span class="muted" style="font-weight:400">（订阅地址末段，6-32 位字母/数字/下划线/短横线）</span></label>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input x-model="repoPath.draft" :placeholder="repoPath.current || '未设置'" maxlength="32"
+                     style="flex:1;min-width:160px;font-family:monospace,Consolas,'Courier New',monospace;font-size:13px">
+              <button type="button" class="btn sm" @click="randomRepoPath()" :disabled="repoPath.saving" title="随机生成新鉴权码到输入框">随机生成</button>
+              <button type="button" class="btn primary sm" @click="applyRepoPath()" :disabled="repoPath.saving || !repoPath.draft.trim()"
+                      x-text="repoPath.saving ? '应用中…' : '应用并同步订阅地址'"></button>
+            </div>
+          </div>
+          <div class="muted" style="margin-top:8px;line-height:1.6;font-size:12px">
+            当前生效末段：<span class="code" x-text="repoPath.current || '(无)'"></span>
+            <template x-if="repoPath.updatedAt"><span> · 上次更换：<span x-text="repoPath.updatedAt"></span></span></template>
+          </div>
+          <div x-show="repoPath.result" x-cloak class="result-box" :class="repoPath.result && repoPath.result.ok ? 'ok' : 'err'" style="margin-top:10px">
+            <template x-if="repoPath.result"><div x-text="repoPath.result.msg || repoPath.result.error"></div></template>
+          </div>
         </div>
       </div>
 
@@ -1606,6 +1697,38 @@
   </section>
 
   <div x-show="toast.msg" x-cloak x-transition class="toast" :class="toast.type" @click="toast.msg=''" x-text="toast.msg"></div>
+
+  <!-- 破解点描述编辑器 -->
+  <div x-show="descEditor.open" x-cloak class="modal-mask" @click.self="closeDescEditor()">
+    <div class="modal-card">
+      <header>
+        <h3 x-text="descEditor.filename || '编辑破解点'"></h3>
+        <button type="button" class="btn ghost sm" @click="closeDescEditor()" aria-label="关闭">×</button>
+      </header>
+      <div class="modal-body">
+        <div class="muted" style="font-size:12px;line-height:1.6">
+          每行一条破解点说明，最多保存 6 条。来源 TG 消息时会自动归纳；保存后会被记为「人工编辑」，
+          此后 TG 自动入库不会再覆盖此条。如果想恢复自动模式，点击「恢复自动」。
+        </div>
+        <div>
+          <label class="muted" style="font-size:12px">破解点（每行一条）</label>
+          <textarea x-model="descEditor.text" rows="6" placeholder="例如：&#10;已解锁 Premium&#10;去除横幅广告&#10;支持深色模式"></textarea>
+        </div>
+        <details x-show="descEditor.rawText" x-cloak>
+          <summary class="muted" style="font-size:12px;cursor:pointer">查看 TG 原始消息（仅供参考，不会保存）</summary>
+          <pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);margin-top:6px;max-height:160px;overflow:auto" x-text="descEditor.rawText"></pre>
+        </details>
+        <div x-show="descEditor.source" x-cloak class="muted" style="font-size:12px">
+          原始消息：<a :href="descEditor.source" target="_blank" rel="noopener" x-text="descEditor.source"></a>
+        </div>
+      </div>
+      <footer>
+        <button type="button" class="btn ghost" @click="resetDescAuto()" :disabled="descEditor.saving" title="清除手动标记，恢复 TG 自动覆盖">恢复自动</button>
+        <button type="button" class="btn" @click="closeDescEditor()" :disabled="descEditor.saving">取消</button>
+        <button type="button" class="btn primary" @click="saveDescEditor()" :disabled="descEditor.saving" x-text="descEditor.saving ? '保存中…' : '保存'"></button>
+      </footer>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1720,6 +1843,8 @@ function ipaApp() {
     unlockResult: null,
     repoInfo: { url: '' },
     repoUrlCopied: false,
+    repoPath: { current: '', draft: '', updatedAt: '', saving: false, result: null },
+    descEditor: { open: false, filename: '', text: '', rawText: '', source: '', saving: false, manual: false },
 
     async init() {
       this.workspace = normalizeWorkspace(localStorage.getItem('ipa-workspace') || 'apps');
@@ -1733,7 +1858,7 @@ function ipaApp() {
       } finally {
         this.loading = false;
       }
-      await Promise.allSettled([this.loadProxy(), this.loadBot(), this.loadAccount(), this.loadUnlock(), this.loadRepoInfo()]);
+      await Promise.allSettled([this.loadProxy(), this.loadBot(), this.loadAccount(), this.loadUnlock(), this.loadRepoInfo(), this.loadRepoPath()]);
       setInterval(() => {
         if (this.workspace === 'logs' && this.autoRefresh) this.loadLog();
         if (this.workspace === 'apps') this.loadStatus();
@@ -2256,6 +2381,105 @@ function ipaApp() {
         const r = await this.api('GET', '/api/repo_info');
         this.repoInfo = { url: r.repo_url || '' };
       } catch (e) {}
+    },
+
+    async loadRepoPath() {
+      try {
+        const r = await this.api('GET', '/api/repo_path');
+        this.repoPath.current = r.current || '';
+        this.repoPath.updatedAt = r.updated_at ? this.formatExpires(r.updated_at) : '';
+        if (!this.repoPath.draft) this.repoPath.draft = r.current || '';
+      } catch (e) {}
+    },
+
+    async randomRepoPath() {
+      try {
+        const r = await this.api('POST', '/api/repo_path/regenerate');
+        if (r && r.candidate) {
+          this.repoPath.draft = r.candidate;
+          this.repoPath.result = null;
+          this.showToast('已生成候选鉴权码，确认无误后点击「应用并同步订阅地址」');
+        }
+      } catch (e) {}
+    },
+
+    async applyRepoPath() {
+      const code = (this.repoPath.draft || '').trim();
+      if (!/^[A-Za-z0-9_-]{6,32}$/.test(code)) {
+        this.repoPath.result = { ok: false, error: '鉴权码必须是 6-32 位字母/数字/下划线/短横线' };
+        return;
+      }
+      if (code === this.repoPath.current) {
+        this.repoPath.result = { ok: false, error: '新鉴权码与当前一致，无需应用' };
+        return;
+      }
+      if (!confirm('应用新鉴权码后，原来的订阅 URL 会立刻失效，所有客户端需要重新订阅。继续？')) return;
+      this.repoPath.saving = true;
+      this.repoPath.result = null;
+      try {
+        const r = await this.api('PUT', '/api/repo_path', { code });
+        this.repoPath.result = { ok: true, msg: r.msg || '已应用' };
+        this.showToast(r.msg || '已应用');
+        if (r.repo_url) this.repoInfo = { url: r.repo_url };
+        await this.loadRepoPath();
+      } catch (e) {
+        this.repoPath.result = { ok: false, error: e.message };
+      }
+      this.repoPath.saving = false;
+    },
+
+    openDescEditor(v) {
+      const initialList = (v.highlights || []).slice(0, 6);
+      this.descEditor = {
+        open: true,
+        filename: v.filename,
+        text: initialList.join('\n'),
+        rawText: v.raw_message || '',
+        source: v.source_message || '',
+        manual: !!v.manual_description,
+        saving: false,
+      };
+    },
+
+    closeDescEditor() {
+      this.descEditor.open = false;
+      this.descEditor.saving = false;
+    },
+
+    async saveDescEditor() {
+      const filename = this.descEditor.filename;
+      if (!filename) return;
+      const lines = (this.descEditor.text || '')
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 6);
+      this.descEditor.saving = true;
+      try {
+        await this.api('PUT', '/api/ipa/description', { filename, highlights: lines });
+        this.showToast('破解点已保存，订阅源已刷新');
+        this.closeDescEditor();
+        await this.loadIpa();
+      } catch (e) {
+        // api() 已弹 toast
+      } finally {
+        this.descEditor.saving = false;
+      }
+    },
+
+    async resetDescAuto() {
+      const filename = this.descEditor.filename;
+      if (!filename) return;
+      if (!confirm('恢复自动模式后，下次 TG 入库会用 TG 消息覆盖目前手动写的破解点。是否继续？')) return;
+      this.descEditor.saving = true;
+      try {
+        await this.api('POST', '/api/ipa/description/auto', { filename });
+        this.showToast('已恢复自动模式');
+        this.closeDescEditor();
+        await this.loadIpa();
+      } finally {
+        this.descEditor.saving = false;
+      }
     },
 
     async copyRepoUrl() {

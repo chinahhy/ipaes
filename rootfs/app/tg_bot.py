@@ -17,6 +17,9 @@ from telethon import TelegramClient
 from telethon.errors import FloodWaitError, PeerFloodError
 from telethon.tl.types import DocumentAttributeFilename
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ipa_descriptions as ipa_desc
+
 CONFIG_PATH = Path("/config/config.json")
 FORWARD_BOT_CONFIG_PATH = Path("/config/forward_bot.json")
 PROXY_CONFIG_PATH = Path("/config/proxy.json")
@@ -349,6 +352,17 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
                 "size_mb": round(size/1024/1024, 1), "ver_key": ver_key,
             })
             result["version_keys"].add(ver_key)
+            # 记录"破解点 / 版本说明"，由 scanner.py 写入 repo.json，WebUI 也会读
+            try:
+                msg_text = (message.text or message.message or "")
+                source_url = ""
+                try:
+                    source_url = f"{group_link.rstrip('/')}/{message.id}" if group_link.startswith("http") else ""
+                except Exception:
+                    source_url = ""
+                ipa_desc.remember_from_message(save_path.name, msg_text, source_url)
+            except Exception as _e:
+                log.warning(f"  记录 IPA 描述失败: {_e}")
             log.info(f"  OK: {save_path.name}")
             sleep_sec = random.randint(rate_limit["min_interval_sec"], rate_limit["max_interval_sec"])
             log.info(f"  等待 {sleep_sec}s..."); await asyncio.sleep(sleep_sec)

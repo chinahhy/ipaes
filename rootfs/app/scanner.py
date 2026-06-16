@@ -15,6 +15,9 @@ from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse, quote
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ipa_descriptions as ipa_desc
+
 # 客户端解锁码（Esign / 全能签 UI 锁）：
 # - apps[].isNeedlock=1 → 客户端默认显示“解锁”按钮，点击后弹解锁码输入框
 # - news.isUnlock=1 + news.url 指向 /auth → 客户端把 udid+code POST 到 /auth 校验
@@ -486,12 +489,19 @@ def build_app_entry(meta: dict) -> dict:
     # size 在魔力签规范里是字符串（如 "58M"），不是字节数；这里转成 MB 字符串。
     size_mb = max(1, round(meta["size"] / (1024 * 1024)))
     size_str = f"{size_mb}M"
-    # localizedDescription 不再用 "Auto-extracted from xxx.ipa" 这种文件名露出（用户要求公开仓库时干净）。
-    desc = f"{meta['name']} v{meta['version']}"
+    # 版本说明：优先用 TG 消息提取出的"破解点高亮"。
+    # 没有的话退回"App 名 vX.Y.Z"作为兜底。
+    desc_record = ipa_desc.get(meta["ipa_filename"]) or {}
+    highlights = desc_record.get("highlights") or []
+    if highlights:
+        # 用项目符号拼成 Esign / 全能签客户端能可读的多行说明
+        desc = "本版本要点：\n" + "\n".join(f"• {h}" for h in highlights)
+    else:
+        desc = f"{meta['name']} v{meta['version']}"
     # 全能签源协议（参照 CN-CodeMan/AppStore/App.json 这个实际部署的源）。
     # 注：仓库主人决定不启用解锁按钮（自用源），所以 lock 固定 "0" = 免费下载。
     # 如果以后要恢复解锁机制，把 lock 改成 "1" 并提供 unlockURL 即可。
-    return {
+    entry = {
         "name": meta["name"],
         "version": meta["version"],
         "versionDate": date_str,
@@ -503,6 +513,12 @@ def build_app_entry(meta: dict) -> dict:
         "tintColor": "",
         "size": str(meta["size"]),
     }
+    # 暴露给 WebUI 的额外字段（不影响 Esign / 全能签解析；它们会忽略未知键）
+    if highlights:
+        entry["highlights"] = highlights
+    if desc_record.get("source"):
+        entry["sourceMessage"] = desc_record["source"]
+    return entry
 
 def _safe_mkdir(p: Path):
     """兼容软链接的目录创建"""
@@ -583,7 +599,7 @@ def scan():
     # 解锁地址在顶层 unlockURL，apps[].lock = "1" 代表加锁。
     repo = {
         "name": REPO_NAME,
-        "message": "添加源后请向源主索取解锁码后方可下载。",
+        "message": "",
         "identifier": REPO_IDENTIFIER,
         "sourceURL": BASE_URL,
         "sourceicon": f"{BASE_URL}/icons/_repo.png",
@@ -619,6 +635,12 @@ def scan():
         if icon.name not in valid_icons:
             print(f"  🗑️ 清理孤立图标: {icon.name}")
             icon.unlink()
+
+    # 同步描述库：删除已经不存在的 IPA 对应的 highlight 记录
+    try:
+        ipa_desc.prune({m.name for m in IPA_DIR.glob("*.ipa")})
+    except Exception as _e:
+        print(f"⚠️ 同步描述库失败: {_e}")
 
     print(f"\n✅ 完成！合并后 {len(final_apps)} 个app（IPA文件{len(apps)}个）")
     return len(apps)

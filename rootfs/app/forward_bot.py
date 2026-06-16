@@ -15,6 +15,9 @@ from urllib.parse import urlparse
 
 import httpx
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ipa_descriptions as ipa_desc
+
 # ===== 配置 =====
 CFG_PATH = Path("/config/forward_bot.json")
 PROXY_PATH = Path("/config/proxy.json")
@@ -386,7 +389,8 @@ async def handle_text_msg(bot: TGClient, chat_id: int, msg_id: int, text: str):
 
     sent = await bot.send_message(chat_id, "\n".join(lines), make_keyboard(buttons))
     info = {"filename": filename, "app_name": app_name, "urls": urls,
-            "mode": "text", "chat_id": chat_id}
+            "mode": "text", "chat_id": chat_id,
+            "caption": text or ""}
     pending[(chat_id, msg_id)] = info
     pending[(chat_id, sent["message_id"])] = info
 
@@ -469,10 +473,12 @@ async def handle_document_msg(bot: TGClient, chat_id: int, msg_id: int, doc: dic
     if fwd_channel:
         info = {"filename": filename, "app_name": app_name,
                 "mode": "tme", "chat_id": chat_id,
-                "tme_channel": fwd_channel, "tme_msg_id": int(fwd_msg_id)}
+                "tme_channel": fwd_channel, "tme_msg_id": int(fwd_msg_id),
+                "caption": caption or ""}
     else:
         info = {"filename": filename, "app_name": app_name, "file_id": doc["file_id"],
-                "mode": "document", "chat_id": chat_id}
+                "mode": "document", "chat_id": chat_id,
+                "caption": caption or ""}
     pending[(chat_id, msg_id)] = info
     pending[(chat_id, sent["message_id"])] = info
 
@@ -611,7 +617,8 @@ async def handle_tme_link(bot: TGClient, chat_id: int, msg_id: int, channel: str
         sent = await bot.send_message(chat_id, "\n".join(lines), make_keyboard(buttons))
         info = {"filename": filename, "app_name": app_name,
                 "mode": "tme", "chat_id": chat_id,
-                "tme_channel": channel, "tme_msg_id": link_msg_id}
+                "tme_channel": channel, "tme_msg_id": link_msg_id,
+                "caption": caption or ""}
         pending[(chat_id, msg_id)] = info
         pending[(chat_id, sent["message_id"])] = info
     finally:
@@ -721,6 +728,18 @@ async def handle_callback(bot: TGClient, cb_id: str, chat_id: int, msg_id: int, 
         stem = filename.rsplit(".", 1)[0]
         dest_path = IPA_DIR / f"{stem}_{ts}.ipa"
     shutil.move(str(tmp_path), str(dest_path))
+
+    # 记录"破解点 / 版本说明"——在 scanner.py 重建 repo.json 之前写入，
+    # 这样这次重建就能拿到最新的 highlights。
+    try:
+        caption = info.get("caption") or ""
+        source_url = ""
+        if info.get("mode") == "tme" and info.get("tme_channel") and info.get("tme_msg_id"):
+            ch = str(info["tme_channel"]).lstrip("@")
+            source_url = f"https://t.me/{ch}/{info['tme_msg_id']}"
+        ipa_desc.remember_from_message(dest_path.name, caption, source_url)
+    except Exception as _e:
+        log.warning(f"记录 IPA 描述失败: {_e}")
 
     # 重建订阅源
     await bot.edit_message_text(chat_id, msg_id, f"📦 正在重建订阅源……\n\n文件：`{dest_path.name}`")

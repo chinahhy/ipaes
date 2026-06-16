@@ -29,28 +29,6 @@ echo "📦 Repo URL: $REPO_BASE_URL"
 echo "⏰ TG 扫描 Cron: $TG_SCAN_CRON (每次回溯 ${TG_SCAN_HOURS}h)"
 [ -n "$TG_PROXY" ] && echo "🌐 TG 代理: $TG_PROXY"
 
-# === 3. 写入 cron 任务（占位，最终值在 4.5 解锁码逻辑之后重写）===
-# 这里先生成框架；4.5 重写 REPO_BASE_URL 后会重写一遍 cron 文件
-write_cron_file() {
-cat > /etc/cron.d/ipa-self-host <<EOF
-# IPA Self-Host TG 自动扫描
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-REPO_BASE_URL=$REPO_BASE_URL
-IPA_ACCESS_TOKEN=$IPA_ACCESS_TOKEN
-TG_PROXY=$TG_PROXY
-TG_SCAN_HOURS=$TG_SCAN_HOURS
-REPO_NAME=$REPO_NAME
-REPO_IDENTIFIER=$REPO_IDENTIFIER
-
-$TG_SCAN_CRON root /app/run-tg-scan.sh
-EOF
-chmod 0644 /etc/cron.d/ipa-self-host
-}
-write_cron_file
-echo "✅ Cron 任务已写入 /etc/cron.d/ipa-self-host"
-
-
 # === 4. 准备日志目录 ===
 mkdir -p /logs /var/log/nginx
 touch /logs/nginx-access.log /logs/nginx-error.log /logs/scanner.log /logs/tg-cron.log /logs/tg-runtime.log
@@ -85,17 +63,12 @@ PY_TOKEN
 export IPA_ACCESS_TOKEN="$ACCESS_TOKEN"
 echo "🔐 访问 token 已启用（值不输出）"
 
-# 路径段：URL 与解锁码彻底解耦。REPO_PATH 仅来自 REPO_BASE_URL 自身路径段；
-# 解锁码（unlock.json.code）不再出现在 URL 中，仅由 /auth 校验。
-# 允许 REPO_BASE_URL 形如 https://host 或 https://host/seg。空路径=订阅入口走根 /。
-_BASE_HOST=$(echo "$REPO_BASE_URL" | sed -E 's|(https?://[^/]+).*|\1|')
-REPO_PATH=$(echo "$REPO_BASE_URL" | sed -E 's|^https?://[^/]+/?||; s|/$||')
-if [ -z "$REPO_PATH" ]; then
-    export REPO_BASE_URL="$_BASE_HOST"
-    echo "🔗 Nginx 入口路径: /  （根路径直发 repo.json）"
-else
-    export REPO_BASE_URL="$_BASE_HOST/$REPO_PATH"
-    echo "🔗 Nginx 入口路径: /$REPO_PATH"
+# === 5. 用统一脚本生成 cron / nginx，REPO_PATH 支持 /config/repo_path.json 热更新 ===
+chmod +x /app/apply-repo-path.sh 2>/dev/null || true
+/app/apply-repo-path.sh
+# apply-repo-path.sh 会把最终 URL 写入 /tmp/repo_base_url.applied
+if [ -s /tmp/repo_base_url.applied ]; then
+    export REPO_BASE_URL="$(cat /tmp/repo_base_url.applied)"
 fi
 echo "📦 最终 REPO_BASE_URL: $REPO_BASE_URL"
 if [ "$UNLOCK_ENABLED" = "True" ] && [ -n "$UNLOCK_CODE" ]; then
@@ -103,94 +76,6 @@ if [ "$UNLOCK_ENABLED" = "True" ] && [ -n "$UNLOCK_CODE" ]; then
 else
     echo "🔓 解锁码已禁用"
 fi
-
-# 用最终 REPO_BASE_URL 重写 cron（让定时扫描的 scanner 用对的 URL）
-write_cron_file
-echo "✅ Cron 已用最终 REPO_BASE_URL 重写"
-
-# REPO_PATH 可能为空（订阅入口=根）。生成 nginx location 时区分处理。
-if [ -z "$REPO_PATH" ]; then
-    SUB_LOCATION='location = / {'
-    SUB_BODY_OVERRIDE='yes'
-    IPA_LOCATION='location ^~ /ipa/ {'
-    ICONS_LOCATION='location ^~ /icons/ {'
-    AUTH_LOCATION='location = /auth {'
-    ROOT_FALLBACK=''   # 根已经是订阅入口，不再屏蔽
-else
-    SUB_LOCATION="location = /$REPO_PATH {"
-    SUB_BODY_OVERRIDE='no'
-    IPA_LOCATION="location ^~ /$REPO_PATH/ipa/ {"
-    ICONS_LOCATION="location ^~ /$REPO_PATH/icons/ {"
-    AUTH_LOCATION="location = /$REPO_PATH/auth {"
-    ROOT_FALLBACK='location = / { return 404; }'
-fi
-
-# 订阅入口的 location body：根路径下 alias 单文件会 500，改用 root+rewrite。
-if [ "$SUB_BODY_OVERRIDE" = "yes" ]; then
-    SUB_BODY='default_type application/json; root /data; rewrite ^ /repo.json break;'
-else
-    SUB_BODY='default_type application/json; alias /data/repo.json;'
-fi
-
-cat > /etc/nginx/conf.d/server.conf <<NGX_EOF
-server {
-    listen 80 default_server;
-    server_name _;
-    charset utf-8;
-
-    add_header Access-Control-Allow-Origin * always;
-    add_header Access-Control-Allow-Methods "GET, HEAD, POST, OPTIONS" always;
-
-    # 健康检查
-    location = /healthz {
-        access_log off;
-        return 200 "ok\n";
-    }
-
-    # 订阅入口：无扩展名URL返回 repo.json（Esign要求）
-    $SUB_LOCATION
-        $SUB_BODY
-    }
-
-    # IPA 下载（URL 与解锁码已解耦；可见性由 /auth 控制）
-    $IPA_LOCATION
-        alias /data/ipa/;
-        autoindex off;
-    }
-
-    # 图标下载
-    $ICONS_LOCATION
-        alias /data/icons/;
-        autoindex on;
-        autoindex_exact_size off;
-        autoindex_localtime on;
-        # 强制客户端每次重新校验 ETag/Last-Modified，避免轻松签 / 全能签按 URL 缓存旧占位图。
-        # 图标 URL 自带 ?v=mtime-size，正常更新时会变；这里再加 no-cache 兜底冷缓存。
-        add_header Cache-Control "no-cache, must-revalidate" always;
-    }
-
-    # 软件源解锁验证接口：Esign/轻松签点"解锁"后会把 udid + code POST 到这里。
-    # 这里反代到 WebUI 后端 /auth，不需要 WebUI 登录 Cookie，只校验 unlock.json 里的解锁码。
-    $AUTH_LOCATION
-        proxy_pass http://127.0.0.1:8085/auth;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    # WebUI 内部下载代理（让 webui 的"下载"按钮即使不知道解锁码也能下）
-    # 端口 8085 走 Basic Auth 鉴权，内部 proxy 不再额外验证
-    location ^~ /_ipa_proxy/ {
-        alias /data/ipa/;
-        add_header Content-Disposition "attachment" always;
-    }
-
-    # 默认根路径屏蔽（仅当订阅入口不是根时启用）
-    $ROOT_FALLBACK
-    location / { return 404; }
-}
-NGX_EOF
 
 echo "✅ Nginx server 配置已生成"
 

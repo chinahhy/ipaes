@@ -8,6 +8,9 @@ from functools import wraps
 from urllib.parse import urlparse
 from flask import Flask, request, jsonify, send_from_directory, Response, abort, make_response, redirect
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ipa_descriptions as ipa_desc
+
 CONFIG_PATH = Path("/config/config.json")
 STATE_PATH = Path("/config/state.json")
 IPA_DIR = Path("/data/ipa")
@@ -362,6 +365,7 @@ def api_list_ipa():
             app_name = m.get("app_name") or fallback["app_name"]
             if not _in_whitelist(f.name, app_name):
                 continue
+            desc_rec = ipa_desc.get(f.name)
             files.append({
                 "filename": f.name,
                 "size": st.st_size,
@@ -375,6 +379,10 @@ def api_list_ipa():
                 "scan_status": scan_status,
                 "downloadable": scan_status != "invalid",
                 "protected": f.name in PROTECTED_FILES,
+                "highlights": desc_rec.get("highlights") or [],
+                "raw_message": desc_rec.get("raw_text") or "",
+                "source_message": desc_rec.get("source") or "",
+                "manual_description": bool(desc_rec.get("manual")),
             })
     files.sort(key=lambda x: -x["mtime"])
     return jsonify({"files": files, "total": len(files)})
@@ -499,7 +507,170 @@ def api_get_log(name):
 @require_auth
 def api_repo_info():
     repo_url = os.environ.get("REPO_BASE_URL", "").strip().rstrip("/")
+    # 优先读取 apply-repo-path.sh 写出的最新值，避免 webui 进程在容器启动后
+    # 持有的环境变量与热更新后的 nginx/repo.json 不一致。
+    applied_path = Path("/tmp/repo_base_url.applied")
+    if applied_path.exists():
+        try:
+            applied_url = applied_path.read_text().strip().rstrip("/")
+            if applied_url:
+                repo_url = applied_url
+        except Exception:
+            pass
     return jsonify({"repo_url": repo_url, "repo_name": os.environ.get("REPO_NAME", ""), "repo_identifier": os.environ.get("REPO_IDENTIFIER", "")})
+
+
+# ============ API: 软件源鉴权码（订阅 URL 末段） ============
+REPO_PATH_OVERRIDE_PATH = Path("/config/repo_path.json")
+REPO_PATH_RE = re.compile(r"^[A-Za-z0-9_-]{6,32}$")
+
+
+def _current_repo_path_segment():
+    """从 REPO_BASE_URL 解析出当前 nginx 暴露的末段（鉴权码）。"""
+    raw_url = ""
+    applied_path = Path("/tmp/repo_base_url.applied")
+    if applied_path.exists():
+        try:
+            raw_url = applied_path.read_text().strip()
+        except Exception:
+            raw_url = ""
+    if not raw_url:
+        raw_url = os.environ.get("REPO_BASE_URL", "")
+    parsed = urlparse(raw_url.strip())
+    parts = [p for p in parsed.path.split("/") if p]
+    return parts[-1] if parts else ""
+
+
+def _load_repo_path_override():
+    if not REPO_PATH_OVERRIDE_PATH.exists():
+        return {}
+    try:
+        return json.loads(REPO_PATH_OVERRIDE_PATH.read_text()) or {}
+    except Exception:
+        return {}
+
+
+def _save_repo_path_override(code: str):
+    REPO_PATH_OVERRIDE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    REPO_PATH_OVERRIDE_PATH.write_text(
+        json.dumps({"code": code, "updated_at": datetime.now().isoformat(timespec="seconds")},
+                   ensure_ascii=False, indent=2)
+    )
+
+
+def _apply_repo_path():
+    """同步调用 apply-repo-path.sh，返回 (ok, stdout_tail, stderr_tail)。"""
+    try:
+        proc = subprocess.run(
+            ["/bin/bash", "/app/apply-repo-path.sh"],
+            capture_output=True, timeout=120, env=os.environ.copy(),
+        )
+        return (
+            proc.returncode == 0,
+            (proc.stdout or b"").decode("utf-8", "ignore")[-400:],
+            (proc.stderr or b"").decode("utf-8", "ignore")[-400:],
+        )
+    except Exception as e:
+        return False, "", str(e)[:400]
+
+
+@app.route("/api/repo_path", methods=["GET"])
+@require_auth
+def api_get_repo_path():
+    current = _current_repo_path_segment()
+    override = _load_repo_path_override()
+    return jsonify({
+        "current": current,
+        "override": str(override.get("code") or ""),
+        "updated_at": override.get("updated_at") or "",
+        "min_length": 6,
+        "max_length": 32,
+    })
+
+
+@app.route("/api/repo_path", methods=["PUT"])
+@require_auth
+def api_set_repo_path():
+    data = request.get_json(force=True) or {}
+    code = (data.get("code") or "").strip()
+    if not REPO_PATH_RE.fullmatch(code):
+        return jsonify({"error": "鉴权码必须是 6-32 位字母/数字/下划线/短横线"}), 400
+    _save_repo_path_override(code)
+    ok, _stdout, stderr = _apply_repo_path()
+    if not ok:
+        return jsonify({"error": f"应用失败: {stderr or '未知错误'}"}), 500
+    new_url = ""
+    applied = Path("/tmp/repo_base_url.applied")
+    if applied.exists():
+        new_url = applied.read_text().strip()
+    return jsonify({
+        "ok": True,
+        "msg": "已应用新鉴权码，订阅地址已同步刷新。",
+        "current": code,
+        "repo_url": new_url,
+    })
+
+
+@app.route("/api/repo_path/regenerate", methods=["POST"])
+@require_auth
+def api_regenerate_repo_path():
+    """生成一个候选鉴权码，但不自动应用——前端拿到后由用户确认再 PUT。"""
+    # 12 位 url-safe 字符；secrets.token_urlsafe(9) ~ 12 char，可能含 _-，与正则一致
+    candidate = secrets.token_urlsafe(9)
+    candidate = re.sub(r"[^A-Za-z0-9_-]", "", candidate)[:16] or secrets.token_hex(6)
+    return jsonify({"candidate": candidate})
+
+
+# ============ API: IPA 破解点描述 ============
+@app.route("/api/ipa/description", methods=["GET"])
+@require_auth
+def api_get_ipa_description():
+    filename = (request.args.get("filename") or "").strip()
+    if not filename:
+        return jsonify({"error": "filename 必填"}), 400
+    rec = ipa_desc.get(filename)
+    return jsonify({
+        "filename": filename,
+        "highlights": rec.get("highlights") or [],
+        "raw_text": rec.get("raw_text") or "",
+        "source": rec.get("source") or "",
+        "saved_at": rec.get("saved_at") or "",
+        "manual": bool(rec.get("manual")),
+    })
+
+
+@app.route("/api/ipa/description", methods=["PUT"])
+@require_auth
+def api_set_ipa_description():
+    data = request.get_json(force=True) or {}
+    filename = (data.get("filename") or "").strip()
+    highlights = data.get("highlights") or []
+    raw_text = (data.get("raw_text") or "").strip()
+    if not filename or "/" in filename or ".." in filename:
+        return jsonify({"error": "filename 非法"}), 400
+    if not (IPA_DIR / filename).exists():
+        return jsonify({"error": "对应 IPA 不存在"}), 404
+    if not isinstance(highlights, list):
+        return jsonify({"error": "highlights 必须是数组"}), 400
+    rec = ipa_desc.set_manual(filename, highlights, raw_text)
+    # 立刻让 scanner 重写 repo.json，使订阅源同步刷新
+    try:
+        subprocess.run([sys.executable, SCANNER_SCRIPT], timeout=60, capture_output=True)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "msg": "已保存，订阅源已刷新", **rec})
+
+
+@app.route("/api/ipa/description/auto", methods=["POST"])
+@require_auth
+def api_reset_ipa_description():
+    """清掉 manual 标记，让下次 TG 入库重新自动覆盖。"""
+    data = request.get_json(force=True) or {}
+    filename = (data.get("filename") or "").strip()
+    if not filename:
+        return jsonify({"error": "filename 必填"}), 400
+    ipa_desc.reset(filename)
+    return jsonify({"ok": True, "msg": "已重置为自动模式，下次扫描会用 TG 消息重新覆盖"})
 
 # ============ API: 解锁码（保留后端逻辑供 nginx/订阅用，只删前端 tab） ============
 @app.route("/api/unlock", methods=["GET"])
