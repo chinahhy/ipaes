@@ -240,6 +240,43 @@ def get_filename(message):
             return attr.file_name
     return None
 
+
+# 同 grouped_id 上下文窗口大小（一次 album 通常 2~10 条；给 20 富裕）
+ALBUM_LOOKAROUND = 20
+
+
+async def resolve_caption(client, entity, message) -> str:
+    """取消息的 caption；若本消息为空且属于 album，则取同 grouped_id 兄弟里
+    最长的那条 caption。
+
+    Telegram album（grouped media）中只有一条消息携带 caption，其它都是
+    空。我们的 IPA 文件可能在前面任意一条上，直接读 message.text 会漏。
+    """
+    text = (getattr(message, "text", None) or getattr(message, "message", None) or "").strip()
+    if text:
+        return text
+    gid = getattr(message, "grouped_id", None)
+    if not gid:
+        return ""
+    try:
+        # 在 message.id 前后各取窗口内的消息
+        ids = list(range(max(1, message.id - ALBUM_LOOKAROUND),
+                         message.id + ALBUM_LOOKAROUND + 1))
+        siblings = await client.get_messages(entity, ids=ids)
+    except Exception as e:
+        log.warning(f"  取 album 兄弟消息失败 ({message.id}): {e!r}")
+        return ""
+    best = ""
+    for s in siblings or []:
+        if not s or s.id == message.id:
+            continue
+        if getattr(s, "grouped_id", None) != gid:
+            continue
+        t = (getattr(s, "text", None) or getattr(s, "message", None) or "").strip()
+        if t and len(t) > len(best):
+            best = t
+    return best
+
 def safe_filename(name):
     name = re.sub(r"[/\\:*?\"<>|]", "_", name)
     return name[:200]
@@ -287,6 +324,23 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
     today_count = sum(1 for f in state["downloaded_files"] if f.startswith(today_str))
     is_priority = group_link in priority_groups
 
+    # 同一 album 内的 caption 解析做一次缓存，避免对每个 IPA 都打一次额外
+    # 的 get_messages。grouped_id 为 None 时不缓存。
+    album_caption_cache: dict = {}
+
+    async def _get_caption(msg):
+        text = (getattr(msg, "text", None) or getattr(msg, "message", None) or "").strip()
+        if text:
+            return text
+        gid = getattr(msg, "grouped_id", None)
+        if gid is None:
+            return ""
+        if gid in album_caption_cache:
+            return album_caption_cache[gid]
+        cap = await resolve_caption(client, entity, msg)
+        album_caption_cache[gid] = cap
+        return cap
+
     async for message in client.iter_messages(entity, offset_date=None, reverse=False, limit=SCAN_LIMIT):
         if message.date < since: break
         result["total_msgs"] += 1
@@ -295,7 +349,10 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
         if not filename or not filename.lower().endswith(".ipa"): continue
         result["ipa_found"] += 1
 
-        app_name = match_whitelist(filename, message.text or "", whitelist)
+        # caption 可能挂在同 album 的兄弟消息上；这里用解析后的 caption 同时
+        # 用于白名单匹配与后续 ipa_desc 写入
+        caption_text = await _get_caption(message)
+        app_name = match_whitelist(filename, caption_text, whitelist)
         if not app_name:
             log.info(f"  跳过（不在白名单）: {filename}")
             result["skipped"] += 1; continue
@@ -354,7 +411,7 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
             result["version_keys"].add(ver_key)
             # 记录"破解点 / 版本说明"，由 scanner.py 写入 repo.json，WebUI 也会读
             try:
-                msg_text = (message.text or message.message or "")
+                msg_text = caption_text
                 source_url = ""
                 try:
                     source_url = f"{group_link.rstrip('/')}/{message.id}" if group_link.startswith("http") else ""
