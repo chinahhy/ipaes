@@ -31,8 +31,10 @@ DESC_PATH = Path("/data/.ipa_descriptions.json")
 MAX_RAW = 1500
 MAX_HIGHLIGHTS = 6
 MAX_HIGHLIGHT_LEN = 80
+MIN_HIGHLIGHTS = 3
 
 # 命中"破解点"的关键词。命中其中任何一个就把这一行视为高亮。
+# 注意：这里是"内容关键词"，跟下面 SKIP 的"段落标题/导引词"不同。
 HIGHLIGHT_KEYWORDS = (
     "破解", "解锁", "去广告", "无广告", "去除广告", "屏蔽广告",
     "广告", "横幅",
@@ -45,7 +47,16 @@ HIGHLIGHT_KEYWORDS = (
     "深色", "新增", "支持", "修复", "优化",
 )
 
-# 这些行直接跳过（链接、标签、订阅广告等）
+# 段落标题：这些行本身只是分组标题，不算破解点
+SECTION_HEADER_RE = re.compile(
+    r"^(?:[\W_]*)(?:破解内容|破解说明|破解点|安装方法|安装说明|安装教程|"
+    r"使用方法|使用说明|更新内容|更新日志|更新说明|版本说明|"
+    r"温馨提示|提示|注意事项|声明|免责声明|警告|"
+    r"资源频道|讨论频道|购买证书|交流群|频道地址|投稿|商务|联系)"
+    r"(?:[:：]?\s*)$"
+)
+
+# 整行直接跳过：链接、tag、订阅广告、安装/分发指引等（针对原始 raw 行）。
 SKIP_PATTERNS = (
     re.compile(r"^\s*$"),
     re.compile(r"^https?://", re.IGNORECASE),
@@ -53,7 +64,49 @@ SKIP_PATTERNS = (
     re.compile(r"^@\w"),
     re.compile(r"^t\.me/", re.IGNORECASE),
     re.compile(r"^[【\[]?(频道|分享|投稿|交流|订阅|联系|广告|推广|商务)", re.IGNORECASE),
+    # markdown 加粗的 hashtag 行：**#xxx**** ****#yyy****
+    re.compile(r"^\s*\*+#\S"),
 )
+
+# 针对 markdown 清洗后的行：整行只剩若干 `#tag`（用空格分隔）就跳过
+TAG_ONLY_LINE_RE = re.compile(r"^\s*#\S+(?:\s+#\S+)*\s*$")
+
+# 包含即跳过：常见安装 / 分发 / 自我宣传话术，不属于破解点。
+# 这里只放"复合短语"，避免误伤合法破解点（"下载视频"/"截屏下载"等）。
+SKIP_CONTAINS = (
+    # 安装 / 分发指引
+    "巨魔", "证书签名", "证书安装", "证书登陆", "证书登录", "自签教程", "签名安装",
+    "购买证书", "appds.vip", "iOS用户需", "需自签", "请使用",
+    # 频道 / 自我宣传
+    "资源频道", "讨论频道", "讨论群", "交流群", "频道地址",
+    # 反馈话术
+    "如遇bug", "请截图", "请添加微信", "永久订阅",
+    "由群友", "提供方法", "提供教程",
+    # 安卓商店分流提示
+    "应用商店", "华为应用", "vivo应用", "oppo应用",
+)
+
+# Telegram Markdown 残片清理：在落到候选行之前先把 markdown 标记拆掉，
+# 避免出现 `**#xxx****`、`****破解内容`、`📄**[**文本**](url)**` 这种噪声。
+_MD_LINK_RE = re.compile(r"\[(?P<text>[^\[\]\n]+?)\]\(\s*[^)\s]+?\s*\)")
+_MD_INLINE_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+_MD_BOLD_STAR_RE = re.compile(r"\*+")
+_MD_BOLD_UND_RE = re.compile(r"__+")
+_HEAD_PUNCT_RE = re.compile(r"^[\s•·\-—\*\+◆◇■□▪▫●○★☆※→➤➜👉🟢🟡🔴🟠🟣🟤⚪⚫🆕🚨📢📌📎📄📱✅✈️❌🍡🌸🌙🍵🌟❗❕]+")
+_TAIL_PUNCT_RE = re.compile(r"[\s，。、；：:;,\.!?！？·•—\-]+$")
+
+
+def _strip_markdown(s: str) -> str:
+    if not s:
+        return ""
+    # [文本](url) → 文本
+    s = _MD_LINK_RE.sub(lambda m: m.group("text"), s)
+    # 裸链接直接去掉
+    s = _MD_INLINE_URL_RE.sub("", s)
+    # **/__ 加粗下划线全部去掉（含 ****/__**__ 这种噪声）
+    s = _MD_BOLD_STAR_RE.sub("", s)
+    s = _MD_BOLD_UND_RE.sub("", s)
+    return s
 
 
 def _load() -> dict:
@@ -71,19 +124,34 @@ def _save(data: dict) -> None:
 
 
 def _clean_line(line: str) -> str:
-    s = line.strip().lstrip("•-*·•").strip()
+    s = _strip_markdown(line or "").strip()
+    # 去掉行首项目符号 / emoji 装饰
+    s = _HEAD_PUNCT_RE.sub("", s).strip()
     # 折叠多空格
-    s = re.sub(r"\s{2,}", " ", s)
+    s = re.sub(r"\s{2,}", " ", s).strip()
+    # 去掉行尾标点
+    s = _TAIL_PUNCT_RE.sub("", s).strip()
     if len(s) > MAX_HIGHLIGHT_LEN:
         s = s[: MAX_HIGHLIGHT_LEN - 1] + "…"
     return s
 
 
+def _looks_like_install_or_promo(line: str) -> bool:
+    """命中安装指引、自我宣传、求助/反馈话术等"非破解点"行。"""
+    return any(token in line for token in SKIP_CONTAINS)
+
+
 def extract_highlights(text: str) -> list[str]:
     """从 TG 消息文本中提取"破解点"高亮列表。
 
-    简单启发式：按行扫描，跳过链接 / 标签 / 订阅广告类，命中 HIGHLIGHT_KEYWORDS
-    的行优先；没有命中时退化为前几行有效内容。"""
+    流程：
+      1. 整段先 strip Telegram Markdown，避免按行扫时被 ** / [..](..)
+         这种格式裂开；
+      2. 按行扫描，跳过空行 / 链接 / tag / 段落标题 / 安装指引 / 自我宣传；
+      3. 命中 HIGHLIGHT_KEYWORDS 的行进 highlights，不命中暂存 fallback；
+      4. highlights 不足 MIN_HIGHLIGHTS 时再从 fallback 补到目标条数；
+         都没有就返回 []。
+    """
     if not text:
         return []
     lines = re.split(r"[\r\n]+", text)
@@ -97,6 +165,12 @@ def extract_highlights(text: str) -> list[str]:
         cleaned = _clean_line(raw)
         if not cleaned or cleaned in seen:
             continue
+        if TAG_ONLY_LINE_RE.match(cleaned):
+            continue
+        if SECTION_HEADER_RE.match(cleaned):
+            continue
+        if _looks_like_install_or_promo(cleaned):
+            continue
         seen.add(cleaned)
         if any(kw in cleaned for kw in HIGHLIGHT_KEYWORDS):
             highlights.append(cleaned)
@@ -105,9 +179,15 @@ def extract_highlights(text: str) -> list[str]:
         elif len(fallback) < MAX_HIGHLIGHTS:
             fallback.append(cleaned)
 
-    if highlights:
-        return highlights
-    return fallback[:MAX_HIGHLIGHTS]
+    # highlights 数量少时用 fallback 补一些"普通正文行"（功能说明/版本细节）
+    if len(highlights) < MIN_HIGHLIGHTS:
+        for line in fallback:
+            if line in highlights:
+                continue
+            highlights.append(line)
+            if len(highlights) >= MIN_HIGHLIGHTS:
+                break
+    return highlights[:MAX_HIGHLIGHTS]
 
 
 def get(filename: str) -> dict:

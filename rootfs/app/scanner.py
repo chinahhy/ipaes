@@ -494,8 +494,9 @@ def build_app_entry(meta: dict) -> dict:
     desc_record = ipa_desc.get(meta["ipa_filename"]) or {}
     highlights = desc_record.get("highlights") or []
     if highlights:
-        # 用项目符号拼成 Esign / 全能签客户端能可读的多行说明
-        desc = "本版本要点：\n" + "\n".join(f"• {h}" for h in highlights)
+        # 直接用项目符号列出破解点，签名 app 卡片里干净最重要
+        # 不加"本版本要点："等段落标题，避免噪声
+        desc = "\n".join(f"• {h}" for h in highlights)
     else:
         desc = f"{meta['name']} v{meta['version']}"
     # 全能签源协议（参照 CN-CodeMan/AppStore/App.json 这个实际部署的源）。
