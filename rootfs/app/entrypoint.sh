@@ -6,7 +6,7 @@
 set -e
 
 echo "================================================"
-echo "  IPA Self-Host  (chinahhy/ipa-self-host)"
+echo "  IPAes  (hoya0803/ipaes)"
 echo "  $(date '+%Y-%m-%d %H:%M:%S')"
 echo "================================================"
 

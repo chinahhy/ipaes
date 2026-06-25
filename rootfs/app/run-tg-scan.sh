@@ -30,7 +30,7 @@ echo "==== TG scan triggered at $(date '+%Y-%m-%d %H:%M:%S') ====" >> "$LOG"
 # Session 检查
 if [ ! -f /session/tg-ipa-bot.session ]; then
     echo "❌ Session 未登录，跳过本次扫描" >> "$LOG"
-    echo "   请运行: docker exec -it ipa-self-host /app/tg-login.sh" >> "$LOG"
+    echo "   请运行: docker exec -it ipaes /app/tg-login.sh" >> "$LOG"
     exit 0
 fi
 

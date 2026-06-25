@@ -1,8 +1,8 @@
-# IPA Self-Host
+# IPAes
 
 [![GitHub](https://img.shields.io/badge/GitHub-chinahhy/ipa--self--host--v2-blue?logo=github)](https://github.com/chinahhy/ipa-self-host-v2)
-[![Docker Pulls](https://img.shields.io/docker/pulls/hoya0803/ipa-self-host?logo=docker)](https://hub.docker.com/r/hoya0803/ipa-self-host)
-[![Docker Image Size](https://img.shields.io/docker/image-size/hoya0803/ipa-self-host/latest?logo=docker)](https://hub.docker.com/r/hoya0803/ipa-self-host)
+[![Docker Pulls](https://img.shields.io/docker/pulls/hoya0803/ipaes?logo=docker)](https://hub.docker.com/r/hoya0803/ipaes)
+[![Docker Image Size](https://img.shields.io/docker/image-size/hoya0803/ipaes/latest?logo=docker)](https://hub.docker.com/r/hoya0803/ipaes)
 
 **iOS IPA 自托管私有源 | Esign/AltStore 兼容 | 单容器部署 | TG 自动下载**
 
@@ -26,7 +26,7 @@
 ## 🚀 一分钟部署
 
 ```bash
-mkdir -p ipa-self-host && cd ipa-self-host
+mkdir -p ipaes && cd ipaes
 curl -O https://raw.githubusercontent.com/chinahhy/ipa-self-host-v2/main/docker-compose.yml
 # 按需修改 docker-compose.yml 里的 REPO_BASE_URL 等环境变量
 docker compose up -d
@@ -36,9 +36,9 @@ docker compose up -d
 
 ```yaml
 services:
-  ipa-self-host:
-    image: hoya0803/ipa-self-host:latest
-    container_name: ipa-self-host
+  ipaes:
+    image: hoya0803/ipaes:latest
+    container_name: ipaes
     restart: unless-stopped
     ports:
       - "8084:80"
@@ -95,7 +95,7 @@ services:
 ## 🔐 Telegram 首次登录
 
 ```bash
-docker exec -it ipa-self-host /app/tg-login.sh
+docker exec -it ipaes /app/tg-login.sh
 ```
 
 按提示输入验证码完成登录，session 持久化到 `./session/`。
@@ -107,13 +107,13 @@ docker exec -it ipa-self-host /app/tg-login.sh
 docker compose pull && docker compose up -d
 
 # 手动触发 TG 扫描（不等 cron）
-docker exec ipa-self-host /app/run-tg-scan.sh
+docker exec ipaes /app/run-tg-scan.sh
 
 # 手动重建 repo.json
-docker exec ipa-self-host /app/scanner.py
+docker exec ipaes /app/scanner.py
 
 # 查看实时日志
-docker logs -f ipa-self-host
+docker logs -f ipaes
 tail -f logs/scanner.log
 tail -f logs/tg-cron.log
 ```
@@ -126,7 +126,7 @@ tail -f logs/tg-cron.log
    [反向代理 nginx/Lucky/Traefik]
        ↓ HTTP :8084
 ┌──────────────────────────────┐
-│ 容器 ipa-self-host           │
+│ 容器 ipaes           │
 │ ├─ nginx (对外服务)          │
 │ ├─ scanner-watcher (inotify) │
 │ └─ cron (TG 定时扫描)        │
@@ -152,4 +152,4 @@ MIT
 
 - **源代码**：https://github.com/chinahhy/ipa-self-host-v2
 - **问题反馈**：https://github.com/chinahhy/ipa-self-host-v2/issues
-- **Docker Hub**：https://hub.docker.com/r/hoya0803/ipa-self-host
+- **Docker Hub**：https://hub.docker.com/r/hoya0803/ipaes

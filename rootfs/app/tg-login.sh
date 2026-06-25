@@ -1,6 +1,6 @@
 #!/bin/bash
 # 首次登录脚本：发送验证码 → 输入验证码 → 完成登录
-# 用法: docker exec -it ipa-self-host /app/tg-login.sh
+# 用法: docker exec -it ipaes /app/tg-login.sh
 set -e
 
 if [ -f /session/tg-ipa-bot.session ]; then

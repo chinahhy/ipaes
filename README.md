@@ -1,4 +1,4 @@
-# IPA Self-Host v2
+# IPAes
 
 > 自托管 iOS IPA 私有源，单镜像部署，支持 Esign/AltStore 订阅。
 
@@ -19,7 +19,7 @@
 ### 1. 部署
 
 ```bash
-mkdir -p ipa-self-host && cd ipa-self-host
+mkdir -p ipaes && cd ipaes
 curl -O https://raw.githubusercontent.com/chinahhy/ipa-self-host-v2/main/docker-compose.yml
 curl -O https://raw.githubusercontent.com/chinahhy/ipa-self-host-v2/main/.env.example
 cp .env.example .env
@@ -63,7 +63,7 @@ docker compose up -d
 ### 4. TG 首次登录
 
 ```bash
-docker exec -it ipa-self-host /app/tg-login.sh
+docker exec -it ipaes /app/tg-login.sh
 ```
 
 ### 5. 订阅源
@@ -73,7 +73,7 @@ docker exec -it ipa-self-host /app/tg-login.sh
 ## 📁 目录结构
 
 ```
-ipa-self-host/
+ipaes/
 ├── docker-compose.yml    # 部署编排
 ├── .env.example          # 环境变量模板
 ├── .env                  # 真实配置（不进仓库）
@@ -102,7 +102,7 @@ docker run -d --name cloudflared-ipa --restart unless-stopped \
   cloudflare/cloudflared:latest tunnel --no-autoupdate run --token <YOUR_TUNNEL_TOKEN>
 ```
 
-将 Tunnel 指向 `http://ipa-self-host:80` 即可。
+将 Tunnel 指向 `http://ipaes:80` 即可。
 
 **Nginx 反代**：
 ```nginx
@@ -120,10 +120,10 @@ location / {
 docker compose pull && docker compose up -d
 
 # 手动触发 TG 扫描
-docker exec ipa-self-host /app/run-tg-scan.sh
+docker exec ipaes /app/run-tg-scan.sh
 
 # 手动重建 repo.json
-docker exec ipa-self-host /app/scanner.py
+docker exec ipaes /app/scanner.py
 
 # 查看日志
 docker compose logs -f

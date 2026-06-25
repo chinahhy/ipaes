@@ -521,7 +521,7 @@ async def _telethon_client():
         raise RuntimeError("config.json 缺少 api_id/api_hash")
     client = TelegramClient(
         str(SESSION_PATH), int(api_id), str(api_hash),
-        device_model="ipa-self-host", system_version="1.0",
+        device_model="ipaes", system_version="1.0",
         proxy=_build_proxy_tuple(),
     )
     await client.connect()

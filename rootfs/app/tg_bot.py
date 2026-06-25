@@ -459,7 +459,7 @@ async def main():
 
     client = TelegramClient(
         str(SESSION_PATH), api_id, api_hash,
-        device_model="ipa-self-host", system_version="1.0",
+        device_model="ipaes", system_version="1.0",
         proxy=PROXY,
     )
 

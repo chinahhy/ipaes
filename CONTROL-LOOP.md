@@ -1,23 +1,23 @@
-# CONTROL-LOOP.md · ipa-self-host-v2
+# CONTROL-LOOP.md · ipaes
 
 > 项目控制环说明书。继承 `~/.codex/AGENTS.md` 的 Engineering Cybernetics
 > Rules 与 `engineering-cybernetics` Skill；模板源在
 > `/Users/hoya/Documents/Projects/控制中心/templates/control-loop-spec.md`。
 >
 > 修改顺序约定：本文件 → 项目根 `AGENTS.md` 的 Project-specific overrides
-> → Obsidian `Codex/ipa-self-host-v2/` 决策记录。本文件保持简洁，决策细节
+> → Obsidian `Codex/ipaes/` 决策记录。本文件保持简洁，决策细节
 > 与历史背景写到 Obsidian。
 
 ---
 
 ## 1. 受控系统（Plant）
 
-- 项目名：`ipa-self-host-v2`
+- 项目名：`ipaes`
 - 一句话定义：自托管 iOS IPA 私有源；Esign / AltStore 兼容；TG 自动下载 + WebUI 管理；单镜像单容器部署。
 - 物理边界：
-  - 仓库：`/Users/hoya/Documents/Projects/ipa-self-host-v2/`
-  - 镜像：`hoya0803/ipa-self-host:latest`（Docker Hub）
-  - 运行容器：HomeLab `homelab-nas` Docker 内的 `ipa-self-host`
+  - 仓库：`/Users/hoya/Documents/Codex/ipaes/`
+  - 镜像：`hoya0803/ipaes:latest`（Docker Hub）
+  - 运行容器：HomeLab `homelab-nas` Docker 内的 `ipaes`
   - 数据卷：`./config /session /logs /data` 与可定制的 `IPA_DIR / ICONS_DIR`
   - 入口：宿主 `${HOST_PORT_NGINX:-8080}`（订阅源）/ `${HOST_PORT_WEBUI:-8085}`（WebUI）
 - 时间边界：长期项目，按发布节奏滚动。
@@ -34,7 +34,7 @@
   - WebUI（控制台）
 - 显式排除项：
   - 不做 IPA 签名/重签
-  - 不维护非自有镜像（仅发布 `hoya0803/ipa-self-host`）
+  - 不维护非自有镜像（仅发布 `hoya0803/ipaes`）
   - 不在仓库内放任何真实 IPA、登录态、`.env`、`config/`
 
 ## 3. 目标态（Target State）
@@ -65,7 +65,7 @@
 - 计划采样粒度：每个有意义的功能/修复一次提交；高风险点（鉴权 / repo.json / 卷挂载）单独成 commit。
 - 采样间状态外部化：
   - 短期：commit message + 本仓库 `README` / `DOCKERHUB_README`
-  - 长期：`/Users/hoya/Documents/obsidian/Codex/ipa-self-host-v2/`
+  - 长期：`/Users/hoya/Documents/obsidian/Codex/ipaes/`
 
 ## 5. 控制律（Control Law）
 
@@ -119,4 +119,4 @@
 - 教训归宿：
   - 通用工程教训 → `~/.codex/AGENTS.md` 或 Memory
   - 项目专有约束 → 本文件 + `AGENTS.md` overrides
-  - 决策与里程碑 → `/Users/hoya/Documents/obsidian/Codex/ipa-self-host-v2/`
+  - 决策与里程碑 → `/Users/hoya/Documents/obsidian/Codex/ipaes/`

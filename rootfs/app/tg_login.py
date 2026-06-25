@@ -37,7 +37,7 @@ async def main():
 
     client = TelegramClient(
         str(SESSION_PATH), config["api_id"], config["api_hash"],
-        device_model="ipa-self-host", system_version="1.0",
+        device_model="ipaes", system_version="1.0",
         proxy=PROXY,
     )
     await client.connect()

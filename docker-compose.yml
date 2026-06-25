@@ -1,23 +1,23 @@
 services:
-  ipa-self-host:
-    image: hoya0803/ipa-self-host:latest
-    container_name: ipa-self-host
+  ipaes:
+    image: hoya0803/ipaes:latest
+    container_name: ipaes
     restart: unless-stopped
     ports:
-      - "${HOST_PORT_NGINX:-8080}:80"
-      - "${HOST_PORT_WEBUI:-8085}:8085"
+      - "8084:80"
+      - "8085:8085"
     volumes:
+      - /tmp/zfsv3/sata13/17551075426a/data/ipa-repo/x7k9m2hP/ipa:/data/ipa
+      - /tmp/zfsv3/sata13/17551075426a/data/ipa-repo/x7k9m2hP/icons:/data/icons
       - ./config:/config
       - ./session:/session
       - ./logs:/logs
       - ./data:/data
-      - ${IPA_DIR:-./data/ipa}:/data/ipa
-      - ${ICONS_DIR:-./data/icons}:/data/icons
     environment:
-      - REPO_BASE_URL=${REPO_BASE_URL:?REPO_BASE_URL is required}
-      - REPO_NAME=${REPO_NAME:-Private IPA Repo}
-      - REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}
-      - TG_PROXY=${TG_PROXY:-}
-      - TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}
-      - TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}
-      - TZ=${TZ:-Asia/Shanghai}
+      - REPO_BASE_URL=${REPO_BASE_URL}
+      - REPO_NAME=Hoya 私人IPA源
+      - REPO_IDENTIFIER=com.hoya.private.repo
+      - TG_PROXY=http://10.0.0.4:7893
+      - TG_SCAN_CRON=0 1 * * *
+      - TG_SCAN_HOURS=25
+      - TZ=Asia/Shanghai

@@ -8,7 +8,7 @@
 #     若 code 非空，则替换 REPO_BASE_URL 末段为 code。
 #
 # 副作用：
-#   1. 重写 /etc/cron.d/ipa-self-host
+#   1. 重写 /etc/cron.d/ipaes
 #   2. 重写 /etc/nginx/conf.d/server.conf
 #   3. 若 nginx master 在跑，nginx -s reload
 #   4. 触发一次 scanner.py 重新生成 repo.json
@@ -38,7 +38,7 @@ echo "🔗 [apply-repo-path] REPO_PATH=${REPO_PATH:-<root>}"
 echo "📦 [apply-repo-path] FINAL_URL=$FINAL_URL"
 
 # === 写 cron ===
-cat > /etc/cron.d/ipa-self-host <<EOF
+cat > /etc/cron.d/ipaes <<EOF
 # IPA Self-Host TG 自动扫描
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
@@ -51,7 +51,7 @@ REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}
 
 ${TG_SCAN_CRON:-0 1 * * *} root /app/run-tg-scan.sh
 EOF
-chmod 0644 /etc/cron.d/ipa-self-host
+chmod 0644 /etc/cron.d/ipaes
 
 # === 写 nginx server.conf ===
 if [ -z "$REPO_PATH" ]; then
