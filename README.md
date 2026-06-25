@@ -20,8 +20,8 @@
 
 ```bash
 mkdir -p ipaes && cd ipaes
-curl -O https://raw.githubusercontent.com/chinahhy/ipa-self-host-v2/main/docker-compose.yml
-curl -O https://raw.githubusercontent.com/chinahhy/ipa-self-host-v2/main/.env.example
+curl -O https://raw.githubusercontent.com/chinahhy/ipaes/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/chinahhy/ipaes/main/.env.example
 cp .env.example .env
 ```
 

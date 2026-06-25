@@ -1,6 +1,6 @@
 # IPAes
 
-[![GitHub](https://img.shields.io/badge/GitHub-chinahhy/ipa--self--host--v2-blue?logo=github)](https://github.com/chinahhy/ipa-self-host-v2)
+[![GitHub](https://img.shields.io/badge/GitHub-chinahhy/ipaes-blue?logo=github)](https://github.com/chinahhy/ipaes)
 [![Docker Pulls](https://img.shields.io/docker/pulls/hoya0803/ipaes?logo=docker)](https://hub.docker.com/r/hoya0803/ipaes)
 [![Docker Image Size](https://img.shields.io/docker/image-size/hoya0803/ipaes/latest?logo=docker)](https://hub.docker.com/r/hoya0803/ipaes)
 
@@ -27,7 +27,7 @@
 
 ```bash
 mkdir -p ipaes && cd ipaes
-curl -O https://raw.githubusercontent.com/chinahhy/ipa-self-host-v2/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/chinahhy/ipaes/main/docker-compose.yml
 # 按需修改 docker-compose.yml 里的 REPO_BASE_URL 等环境变量
 docker compose up -d
 ```
@@ -150,6 +150,6 @@ MIT
 
 ## 🔗 链接
 
-- **源代码**：https://github.com/chinahhy/ipa-self-host-v2
-- **问题反馈**：https://github.com/chinahhy/ipa-self-host-v2/issues
+- **源代码**：https://github.com/chinahhy/ipaes
+- **问题反馈**：https://github.com/chinahhy/ipaes/issues
 - **Docker Hub**：https://hub.docker.com/r/hoya0803/ipaes
