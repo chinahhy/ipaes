@@ -39,7 +39,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: hoya0803/ipa-self-host
+          images: hoya0803/ipaes
           tags: |
             type=ref,event=branch
             type=ref,event=tag

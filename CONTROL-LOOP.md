@@ -2,7 +2,7 @@
 
 > 项目控制环说明书。继承 `~/.codex/AGENTS.md` 的 Engineering Cybernetics
 > Rules 与 `engineering-cybernetics` Skill；模板源在
-> `/Users/hoya/Documents/Projects/控制中心/templates/control-loop-spec.md`。
+> `~/Documents/Projects/控制中心/templates/control-loop-spec.md`。
 >
 > 修改顺序约定：本文件 → 项目根 `AGENTS.md` 的 Project-specific overrides
 > → Obsidian `Codex/ipaes/` 决策记录。本文件保持简洁，决策细节
@@ -15,7 +15,7 @@
 - 项目名：`ipaes`
 - 一句话定义：自托管 iOS IPA 私有源；Esign / AltStore 兼容；TG 自动下载 + WebUI 管理；单镜像单容器部署。
 - 物理边界：
-  - 仓库：`/Users/hoya/Documents/Codex/ipaes/`
+  - 仓库：`~/Documents/Codex/ipaes/`
   - 镜像：`hoya0803/ipaes:latest`（Docker Hub）
   - 运行容器：HomeLab `homelab-nas` Docker 内的 `ipaes`
   - 数据卷：`./config /session /logs /data` 与可定制的 `IPA_DIR / ICONS_DIR`
@@ -65,7 +65,7 @@
 - 计划采样粒度：每个有意义的功能/修复一次提交；高风险点（鉴权 / repo.json / 卷挂载）单独成 commit。
 - 采样间状态外部化：
   - 短期：commit message + 本仓库 `README` / `DOCKERHUB_README`
-  - 长期：`/Users/hoya/Documents/obsidian/Codex/ipaes/`
+  - 长期：`~/Documents/obsidian/Codex/ipaes/`
 
 ## 5. 控制律（Control Law）
 
@@ -119,4 +119,4 @@
 - 教训归宿：
   - 通用工程教训 → `~/.codex/AGENTS.md` 或 Memory
   - 项目专有约束 → 本文件 + `AGENTS.md` overrides
-  - 决策与里程碑 → `/Users/hoya/Documents/obsidian/Codex/ipaes/`
+  - 决策与里程碑 → `~/Documents/obsidian/Codex/ipaes/`

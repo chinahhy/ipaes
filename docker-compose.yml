@@ -7,17 +7,17 @@ services:
       - "8084:80"
       - "8085:8085"
     volumes:
-      - /tmp/zfsv3/sata13/17551075426a/data/ipa-repo/x7k9m2hP/ipa:/data/ipa
-      - /tmp/zfsv3/sata13/17551075426a/data/ipa-repo/x7k9m2hP/icons:/data/icons
+      - /your/path/to/ipa:/data/ipa
+      - /your/path/to/icons:/data/icons
       - ./config:/config
       - ./session:/session
       - ./logs:/logs
       - ./data:/data
     environment:
       - REPO_BASE_URL=${REPO_BASE_URL}
-      - REPO_NAME=Hoya 私人IPA源
-      - REPO_IDENTIFIER=com.hoya.private.repo
-      - TG_PROXY=http://10.0.0.4:7893
+      - REPO_NAME=My IPA Repo
+      - REPO_IDENTIFIER=com.example.ipa.repo
+      - TG_PROXY=
       - TG_SCAN_CRON=0 1 * * *
       - TG_SCAN_HOURS=25
       - TZ=Asia/Shanghai

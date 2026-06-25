@@ -20,6 +20,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: hoya0803/ipa-self-host
+          repository: hoya0803/ipaes
           short-description: "iOS IPA 自托管私有源 | Esign/AltStore 兼容 | 单容器部署 | TG 自动下载"
           readme-filepath: ./DOCKERHUB_README.md
