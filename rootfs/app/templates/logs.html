@@ -1,0 +1,21 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <section class="view" x-cloak x-transition.opacity.duration.150ms>
+    <div class="panel">
+      <div class="panel-head">
+        <div class="head-block">
+          <h2>日志</h2>
+        </div>
+        <div class="log-tools">
+          <select x-model="logName" @change="loadLog()">
+            <option value="tg-cron">TG 扫描</option>
+            <option value="scanner">仓库扫描</option>
+            <option value="nginx-error">Nginx 错误</option>
+          </select>
+          <button type="button" class="btn sm" @click="loadLog()">刷新</button>
+        </div>
+      </div>
+      <pre class="log" x-text="logContent || '(空)'"></pre>
+    </div>
+  </section>
+{% endblock %}

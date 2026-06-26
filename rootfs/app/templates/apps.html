@@ -1,0 +1,173 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <section class="view apps-view" x-cloak x-transition.opacity.duration.150ms>
+    <div class="panel apps-panel">
+      <div class="panel-head">
+        <div class="head-block">
+          <h2>APP</h2>
+          <span x-text="appSearch ? '筛选中' : appsSummary()"></span>
+        </div>
+        <div class="head-actions">
+          <button type="button" class="btn sm" @click="triggerScan()" :disabled="scanning" title="触发一次 TG 扫描，从配置好的群组拉取最新 IPA">
+            <span x-text="scanning ? '🔍 扫描中…' : '🔍 扫描'"></span>
+          </button>
+          <button type="button" class="btn sm primary pulse-btn" @click="reindexNow()" :disabled="reindexing" :class="{loading:reindexing}" title="重新扫描磁盘并重建 IPA 元信息缓存">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" x-show="!reindexing"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>
+            <span class="spinner" x-show="reindexing" x-cloak aria-hidden="true"></span>
+            <span x-text="reindexing ? '索引中…' : '重建索引'"></span>
+          </button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="topbar-progress" x-show="reindexing" x-cloak><span></span></div>
+
+        <!-- 顶部统计 -->
+        <div class="stats-row" x-show="!loading" x-cloak>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(99,102,241,.18); color:#a5b4fc;">📦</div>
+            <div class="stat-body">
+              <div class="stat-value" x-text="statsOverview().appCount"></div>
+              <div class="stat-label">APP 数量</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(16,185,129,.18); color:#6ee7b7;">📁</div>
+            <div class="stat-body">
+              <div class="stat-value" x-text="statsOverview().fileCount"></div>
+              <div class="stat-label">IPA 文件</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(244,114,182,.18); color:#f9a8d4;">💾</div>
+            <div class="stat-body">
+              <div class="stat-value" x-text="statsOverview().totalSize"></div>
+              <div class="stat-label">总占用</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(251,191,36,.18); color:#fcd34d;">✨</div>
+            <div class="stat-body">
+              <div class="stat-value" x-text="statsOverview().last7d"></div>
+              <div class="stat-label">7 天新增</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 趋势 + 热力图 -->
+        <div class="charts-row" x-show="!loading && statsOverview().fileCount > 0" x-cloak>
+          <div class="chart-card">
+            <div class="chart-head">
+              <h3>30 天更新趋势</h3>
+              <span class="chart-sub" x-text="'共 ' + trendStats().total + ' 个 IPA 更新'"></span>
+            </div>
+            <div class="chart-svg-wrap" x-html="trendStats().svg"></div>
+            <div class="chart-axis">
+              <span x-text="trendStats().firstLabel"></span>
+              <span x-text="trendStats().midLabel"></span>
+              <span x-text="trendStats().lastLabel"></span>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-head">
+              <h3>30 天活跃热力图</h3>
+              <span class="chart-sub" x-text="'活跃 ' + heatmapStats().activeDays + ' 天 · ' + heatmapStats().total + ' 个 IPA'"></span>
+            </div>
+            <div class="heatmap">
+              <template x-for="(d, i) in heatmapStats().cells" :key="i">
+                <span class="heat-cell" :data-level="d.level" :title="d.title"></span>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="search"><input x-model="appSearch" placeholder="搜索 APP / 文件 / 版本"></div>
+          <select x-model="appSort">
+            <option value="recent">最近更新</option>
+            <option value="name">名称</option>
+            <option value="count">版本数</option>
+          </select>
+        </div>
+
+        <div class="skeleton-grid" x-show="loading" x-cloak>
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
+
+        <template x-if="!loading && !filteredApps().length">
+          <div class="empty">
+            <div>
+              <strong>没有匹配内容</strong>
+              <span>换个关键词，或先执行一次扫描。</span>
+            </div>
+          </div>
+        </template>
+
+        <div class="app-list" x-show="!loading && filteredApps().length" x-cloak>
+          <template x-for="app in filteredApps()" :key="app.name">
+            <article class="app-row" :class="{expanded:app.expanded}">
+              <button type="button" class="app-main" @click="toggleApp(app)">
+                <div class="app-icon" :class="{missing: !appIconSrc(app)}">
+                  <template x-if="appIconSrc(app)">
+                    <img :src="appIconSrc(app)" @error="handleIconError($event, app)" alt="">
+                  </template>
+                </div>
+                <div class="app-info">
+                  <h3 x-text="app.name"></h3>
+                  <p class="app-desc" x-text="app.description" x-show="!app.expanded"></p>
+                  <span class="app-meta-line" x-text="appSummary(app)" x-show="!app.expanded"></span>
+                </div>
+                <div class="app-card-meta">
+                  <div class="app-card-meta-left">
+                    <span class="app-time" x-text="app.versions[0]?.mtime_str || '-'"></span>
+                  </div>
+                </div>
+                <span class="chev" :class="{open:app.expanded}">›</span>
+              </button>
+              <div class="version-list" :class="{open:app.expanded}">
+                <template x-for="v in app.versions" :key="v.filename">
+                  <div class="version-row" :class="{invalid:v.scan_status==='invalid'}">
+                    <div class="version-info">
+                      <div class="version-title">
+                        <span class="ver" x-text="versionLabel(v)"></span>
+                        <span class="bad-badge" x-show="v.scan_status==='invalid'" x-cloak>损坏</span>
+                        <span class="bad-badge warn" x-show="v.scan_status==='unscanned'" x-cloak>未入库</span>
+                      </div>
+                      <div class="version-highlights" x-show="(v.highlights || []).length" x-cloak>
+                        <template x-for="h in (v.highlights || [])" :key="h">
+                          <span class="highlight-tag" x-text="h"></span>
+                        </template>
+                        <button type="button" class="btn ghost xs" @click.stop="openDescEditor(v)" title="编辑这条破解点说明">编辑</button>
+                      </div>
+                      <div class="version-highlights muted" x-show="!(v.highlights || []).length" x-cloak>
+                        <span class="highlight-empty">暂无破解点说明</span>
+                        <button type="button" class="btn ghost xs" @click.stop="openDescEditor(v)" title="手动补充破解点说明">补充</button>
+                      </div>
+                    </div>
+                    <div class="version-actions">
+                      <button type="button" class="btn sm icon" @click.stop="downloadIpa(v)" :disabled="v.downloadable===false" title="下载" aria-label="下载">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="m6 12 6 6 6-6"/><path d="M5 20h14"/></svg>
+                      </button>
+                      <template x-if="v.protected">
+                        <span class="btn sm icon" title="受保护文件，禁止删除" aria-label="受保护" style="cursor:not-allowed;opacity:.55;">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                        </span>
+                      </template>
+                      <template x-if="!v.protected">
+                        <button type="button" class="btn danger sm icon" @click.stop="delIpaSingle(v.filename)" title="删除" aria-label="删除">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </article>
+          </template>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
 from urllib.parse import urlparse
-from flask import Flask, request, jsonify, send_from_directory, Response, abort, make_response, redirect
+from flask import Flask, request, jsonify, send_from_directory, Response, abort, make_response, redirect, render_template
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
@@ -89,7 +89,11 @@ def _valid_session(sid):
 def _clear_sessions():
     _sessions.clear()
 
-app = Flask(__name__, static_folder=None)
+app = Flask(
+    __name__,
+    static_folder=None,
+    template_folder=str(Path(__file__).parent / "templates"),
+)
 
 # ============ 工具函数 ============
 def load_config():
@@ -1362,11 +1366,31 @@ def api_restart():
     threading.Thread(target=_exit, daemon=True).start()
     return jsonify({"ok": True, "msg": "容器将在 1 秒后重启，请稍候 5-10 秒刷新页面"})
 
-# ============ 静态文件 + 首页 ============
+# ============ 静态文件 + 多页路由 (MPA) ============
 @app.route("/")
 @require_auth
-def index():
-    return send_from_directory(STATIC_DIR, "index.html")
+def index_redirect():
+    return redirect("/apps")
+
+@app.route("/apps")
+@require_auth
+def page_apps():
+    return render_template("apps.html", page_id="apps")
+
+@app.route("/rules")
+@require_auth
+def page_rules():
+    return render_template("rules.html", page_id="rules")
+
+@app.route("/ops")
+@require_auth
+def page_ops():
+    return render_template("ops.html", page_id="ops")
+
+@app.route("/logs")
+@require_auth
+def page_logs():
+    return render_template("logs.html", page_id="logs")
 
 @app.route("/static/<path:p>")
 @require_auth

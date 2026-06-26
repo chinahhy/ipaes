@@ -1,0 +1,95 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <section class="view" x-cloak x-transition.opacity.duration.150ms>
+    <div class="grid rules">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="head-block">
+            <h2>群组</h2>
+            <span x-text="(cfg.groups || []).length + ' 个来源 · ' + (cfg.priority_groups || []).length + ' 优先'"></span>
+          </div>
+          <div class="head-actions">
+            <input class="head-input" x-model="newGroup" placeholder="https://t.me/xxx" @keydown.enter.prevent="addGroup()">
+            <button type="button" class="btn primary sm icon" @click="addGroup()" title="添加群组" aria-label="添加群组">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <template x-if="!cfg.groups || !cfg.groups.length">
+            <div class="empty">
+              <div>
+                <strong>还没有群组</strong>
+                <span>添加 `t.me` 链接后即可扫描。</span>
+              </div>
+            </div>
+          </template>
+          <div class="group-chips" x-show="cfg.groups && cfg.groups.length" x-cloak>
+            <template x-for="g in (cfg.groups || [])" :key="g">
+              <div class="group-chip" :class="{prio:(cfg.priority_groups || []).includes(g)}">
+                <button
+                  type="button"
+                  class="chip-star"
+                  :class="{active:(cfg.priority_groups || []).includes(g)}"
+                  @click="togglePriority(g)"
+                  :title="(cfg.priority_groups || []).includes(g) ? '取消优先' : '设为优先'"
+                  :aria-label="(cfg.priority_groups || []).includes(g) ? '取消优先' : '设为优先'">
+                  <svg viewBox="0 0 24 24" width="14" height="14" :fill="(cfg.priority_groups || []).includes(g) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </button>
+                <a class="chip-link" :href="g" target="_blank" x-text="groupLabel(g)" :title="g"></a>
+                <button type="button" class="chip-del" @click="delGroup(g)" title="移除" aria-label="移除">×</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="head-block">
+            <h2>白名单</h2>
+            <span x-text="(cfg.whitelist || []).length + ' 个 APP · ' + whitelistKeywordTotal() + ' 个关键词'"></span>
+          </div>
+          <div class="head-actions wl">
+            <input class="head-input" x-model="newApp.name" placeholder="应用名">
+            <input class="head-input" x-model="newApp.keywords" placeholder="关键词 1, 关键词 2">
+            <button type="button" class="btn primary sm icon" @click="addApp()" title="添加白名单" aria-label="添加白名单">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <template x-if="!cfg.whitelist || !cfg.whitelist.length">
+            <div class="empty">
+              <div>
+                <strong>还没有规则</strong>
+                <span>应用名和关键词会一起参与筛选。</span>
+              </div>
+            </div>
+          </template>
+          <div class="whitelist-grid" x-show="cfg.whitelist && cfg.whitelist.length" x-cloak>
+            <template x-for="app in (cfg.whitelist || [])" :key="app.name">
+              <div class="whitelist-item">
+                <div class="whitelist-top">
+                  <div class="grow">
+                    <b x-text="app.name"></b>
+                    <span class="kw-count" x-text="app.keywords.length + ' 词'"></span>
+                  </div>
+                  <button type="button" class="btn danger sm icon" @click="delApp(app.name)" title="删除" aria-label="删除">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                </div>
+                <div class="tag-cloud">
+                  <template x-for="(k,i) in app.keywords" :key="k">
+                    <span class="tag"><span x-text="k"></span><button type="button" @click="delKeyword(app,i)">×</button></span>
+                  </template>
+                  <input class="inline-add" x-model="newKw[app.name]" placeholder="+ 关键词" @keydown.enter.prevent="addKeyword(app)">
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
