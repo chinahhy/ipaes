@@ -13,8 +13,17 @@
 (function() {
   try {
     const mode = localStorage.getItem('ipa-theme-mode') || 'dark';
-    const hour = new Date().getHours();
-    const theme = mode === 'auto' ? ((hour >= 7 && hour < 19) ? 'light' : 'dark') : mode;
+    const systemTheme = () => {
+      try {
+        if (window.matchMedia) {
+          if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+          if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+        }
+      } catch (e) {}
+      const hour = new Date().getHours();
+      return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+    };
+    const theme = mode === 'auto' ? systemTheme() : mode;
     document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
   } catch (e) {
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -1565,7 +1574,7 @@
           <div class="field" style="position:relative">
             <label>订阅地址</label>
             <div style="display:flex;gap:8px;align-items:center">
-              <input :value="repoInfo.url" readonly style="flex:1;cursor:text;font-family:monospace,Consolas,'Courier New',monospace;font-size:13px" @click="$event.target.select()">
+              <input x-ref="repoUrlInput" :value="repoInfo.url" readonly style="flex:1;cursor:text;font-family:monospace,Consolas,'Courier New',monospace;font-size:13px" @click="$event.target.select()">
               <button type="button" class="btn primary sm" style="flex:0 0 auto;white-space:nowrap" @click="copyRepoUrl()" :disabled="!repoInfo.url" x-text="repoUrlCopied ? '✓ 已复制' : '复制'"></button>
             </div>
           </div>
@@ -1768,11 +1777,21 @@ function normalizeThemeMode(mode) {
   return ['dark', 'light', 'auto'].includes(mode) ? mode : 'dark';
 }
 
+function resolveSystemTheme() {
+  try {
+    if (window.matchMedia) {
+      if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    }
+  } catch (e) {}
+  const hour = new Date().getHours();
+  return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+}
+
 function resolveTheme(mode) {
   const next = normalizeThemeMode(mode);
   if (next !== 'auto') return next;
-  const hour = new Date().getHours();
-  return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+  return resolveSystemTheme();
 }
 
 function normalizeWorkspace(name) {
@@ -1809,6 +1828,7 @@ function ipaApp() {
     lastSyncMsg: '',
     _pollTimer: null,
     _tickTimer: null,
+    _themeMedia: null,
     _nowTick: 0,
     newGroup: '',
     newApp: { name: '', keywords: '' },
@@ -1852,6 +1872,7 @@ function ipaApp() {
       this.workspace = normalizeWorkspace(localStorage.getItem('ipa-workspace') || 'apps');
       this.themeMode = normalizeThemeMode(localStorage.getItem('ipa-theme-mode') || 'dark');
       this.applyTheme();
+      this.watchSystemTheme();
       setInterval(() => {
         if (this.themeMode === 'auto') this.applyTheme();
       }, 60000);
@@ -1887,6 +1908,20 @@ function ipaApp() {
       this.currentTheme = resolveTheme(this.themeMode);
       document.documentElement.setAttribute('data-theme', this.currentTheme);
       localStorage.setItem('ipa-theme-mode', this.themeMode);
+    },
+
+    watchSystemTheme() {
+      if (this._themeMedia) return;
+      try {
+        if (!window.matchMedia) return;
+        const media = window.matchMedia('(prefers-color-scheme: dark)');
+        const handler = () => {
+          if (this.themeMode === 'auto') this.applyTheme();
+        };
+        if (media.addEventListener) media.addEventListener('change', handler);
+        else if (media.addListener) media.addListener(handler);
+        this._themeMedia = { media, handler };
+      } catch (e) {}
     },
 
     toggleApp(app) {
@@ -2486,19 +2521,53 @@ function ipaApp() {
 
     async copyRepoUrl() {
       if (!this.repoInfo.url) return;
+      const text = this.repoInfo.url;
+      const copied = () => {
+        this.repoUrlCopied = true;
+        this.showToast('已复制到剪贴板');
+        setTimeout(() => { this.repoUrlCopied = false; }, 2000);
+      };
+      // 1) Clipboard API（仅安全上下文：HTTPS / localhost）
       try {
-        await navigator.clipboard.writeText(this.repoInfo.url);
-        this.repoUrlCopied = true;
-        this.showToast('已复制到剪贴板');
-        setTimeout(() => { this.repoUrlCopied = false; }, 2000);
+        if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(text);
+          copied();
+          return;
+        }
       } catch (e) {
-        // Fallback for older browsers
-        const input = document.querySelector('[readonly][x-ref="repoUrlInput"]');
-        if (input) { input.select(); document.execCommand('copy'); }
-        this.showToast('已复制到剪贴板');
-        this.repoUrlCopied = true;
-        setTimeout(() => { this.repoUrlCopied = false; }, 2000);
+        // 继续走 fallback
       }
+      // 2) 临时 textarea fallback（脱离 Alpine refs，兼容 HTTP 内网访问）
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '0';
+        ta.style.left = '-9999px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        const prevSelection = document.getSelection().rangeCount > 0
+          ? document.getSelection().getRangeAt(0)
+          : null;
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        let ok = false;
+        try { ok = document.execCommand && document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        if (prevSelection) {
+          document.getSelection().removeAllRanges();
+          document.getSelection().addRange(prevSelection);
+        }
+        if (ok) { copied(); return; }
+      } catch (e) {}
+      // 3) 最后兜底：选中原 input，让用户 Ctrl+C
+      try {
+        const input = this.$refs && this.$refs.repoUrlInput;
+        if (input) { input.focus(); input.select(); }
+      } catch (e) {}
+      this.showToast('复制失败，已选中地址，请按 Ctrl+C / ⌘+C', 'err');
     },
 
     async saveUnlock() {
