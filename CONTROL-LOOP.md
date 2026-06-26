@@ -17,7 +17,7 @@
 - 物理边界：
   - 仓库：`~/Documents/Codex/ipaes/`
   - 镜像：`hoya0803/ipaes:latest`（Docker Hub）
-  - 运行容器：HomeLab `homelab-nas` Docker 内的 `ipaes`
+  - 运行容器：`homelab-nas` Docker 内的 `ipaes`
   - 数据卷：`./config /session /logs /data` 与可定制的 `IPA_DIR / ICONS_DIR`
   - 入口：宿主 `${HOST_PORT_NGINX:-8080}`（订阅源）/ `${HOST_PORT_WEBUI:-8085}`（WebUI）
 - 时间边界：长期项目，按发布节奏滚动。
@@ -69,10 +69,10 @@
 
 ## 5. 控制律（Control Law）
 
-- 主要干预手段：编辑 `rootfs/app/*.py`、`rootfs/etc/`、Dockerfile、compose、文档；通过 GHA 推镜像；HomeLab 端 `docker compose pull && up -d`。
+- 主要干预手段：编辑 `rootfs/app/*.py`、`rootfs/etc/`、Dockerfile、compose、文档；通过 GHA 推镜像；远端 `docker compose pull && up -d`。
 - 单步上限：单 PR/commit 不混合「行为变更 + 重构 + 依赖升级」三类。
 - 回退策略：
-  - 镜像层：保留上一个稳定 tag，HomeLab 可 `image:` 指定回退
+  - 镜像层：保留上一个稳定 tag，远端可 `image:` 指定回退
   - 配置层：`unlock.json` / `config.json` 改动前读旧值并保底
   - 数据层：永不在容器内主动删 `IPA_DIR`
 
@@ -93,7 +93,7 @@
 - 已知耦合：
   - WebUI 与 scanner 共享 `/data` 目录与 `repo.json`
   - nginx 路径前缀由 `REPO_BASE_URL` 决定，改动会影响已分发的订阅
-- 已知时滞最长：跨架构镜像构建 → 用户拉取 → HomeLab 部署
+- 已知时滞最长：跨架构镜像构建 → 用户拉取 → 远端部署
 - 边界条件：
   - IPA 文件名包含特殊字符 / 多版本同 BundleId / CgBI 加密 PNG 图标
   - TG 代理失效时 fallback 到直连不可用
