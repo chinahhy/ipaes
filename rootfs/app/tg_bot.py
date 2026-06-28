@@ -158,24 +158,13 @@ def version_label(filename):
     return "新版本"
 
 def build_notification_text(downloaded, total_ipa, total_dl, total_skipped, errors_count):
-    lines = [
-        "🌸 IPA 入库扫描完成啦～",
-        "おつかれさまです，今天也辛苦啦 ʕっ•ᴥ•ʔっ ✨",
-        "",
-        f"🎀 本次新入库 {total_dl} 个版本：",
-    ]
-    for item in downloaded[:12]:
-        lines.append(f"🍡 {item['app']} · {version_label(item['filename'])}")
-        lines.append(f"   {item['filename']} · {item['size_mb']}MB")
-    if len(downloaded) > 12:
-        lines.append(f"…还有 {len(downloaded) - 12} 个新版本，去 WebUI 看完整列表喔～")
-    lines.extend([
-        "",
-        f"📊 扫描小结：发现 {total_ipa} 个 IPA / 入库 {total_dl} 个 / 跳过 {total_skipped} 个",
-    ])
+    lines = [f"入库 {total_dl} 个"]
+    for item in downloaded[:10]:
+        lines.append(f"{item['app']} {version_label(item['filename'])}  {item['size_mb']}MB")
+    if len(downloaded) > 10:
+        lines.append(f"...还有 {len(downloaded) - 10} 个")
     if errors_count:
-        lines.append(f"🍵 有 {errors_count} 个小问题，详情在日志里。")
-    lines.append("きらきら～仓库已经更新好啦 🌙")
+        lines.append(f"异常 {errors_count} 个")
     return "\n".join(lines)
 
 async def send_scan_notification(config, all_results, total_ipa, total_dl, total_skipped):
@@ -395,7 +384,10 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
 
         log.info(f"  下载: [{app_name}] {filename} ({size/1024/1024:.1f}MB)")
         try:
-            await client.download_media(message, file=str(part_path))
+            await asyncio.wait_for(
+                client.download_media(message, file=str(part_path)),
+                timeout=600,  # 单文件 10 分钟超时，避免卡死拖垮整个扫描
+            )
             ok, reason = validate_ipa(part_path, size)
             if not ok:
                 raise RuntimeError(reason)
@@ -429,6 +421,13 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
         except PeerFloodError as e:
             log.error(f"  PeerFlood! 账号可能被风控")
             result["errors"].append(f"PeerFlood: {e}"); raise
+        except asyncio.TimeoutError:
+            try:
+                part_path.unlink()
+            except OSError:
+                pass
+            log.error(f"  下载超时（10分钟）: {filename}")
+            result["errors"].append(f"{filename}: 下载超时")
         except Exception as e:
             try:
                 part_path.unlink()
@@ -510,7 +509,10 @@ async def main():
         save_state(state)
 
     finally:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        except Exception as e:
+            log.warning(f"断开连接时异常（不影响扫描结果）: {e!r}")
         log.info("断开连接，扫描完成")
 
 
