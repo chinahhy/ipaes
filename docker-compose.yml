@@ -18,6 +18,6 @@ services:
       - REPO_NAME=My IPA Repo
       - REPO_IDENTIFIER=com.example.ipa.repo
       - TG_PROXY=
-      - TG_SCAN_CRON=0 1 * * *
+      - TG_SCAN_CRON=0 17 * * *
       - TG_SCAN_HOURS=25
       - TZ=Asia/Shanghai

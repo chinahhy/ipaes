@@ -25,6 +25,10 @@ export TG_SCAN_HOURS="${TG_SCAN_HOURS:-25}"
 export REPO_NAME="${REPO_NAME:-Private IPA Repo}"
 export REPO_IDENTIFIER="${REPO_IDENTIFIER:-com.private.ipa.repo}"
 
+# === 2.5 统一时区（确保 cron 和日志时间一致）===
+ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+echo "Asia/Shanghai" > /etc/timezone
+
 echo "📦 Repo URL: $REPO_BASE_URL"
 echo "⏰ TG 扫描 Cron: $TG_SCAN_CRON (每次回溯 ${TG_SCAN_HOURS}h)"
 [ -n "$TG_PROXY" ] && echo "🌐 TG 代理: $TG_PROXY"

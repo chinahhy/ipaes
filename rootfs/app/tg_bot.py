@@ -57,6 +57,8 @@ def load_proxy_url():
 PROXY = parse_proxy(load_proxy_url())
 SCAN_HOURS = int(os.environ.get("TG_SCAN_HOURS", "25"))
 SCAN_LIMIT = int(os.environ.get("TG_SCAN_LIMIT", "500"))
+DOWNLOAD_TIMEOUT = int(os.environ.get("TG_DOWNLOAD_TIMEOUT", "1800"))  # 单文件下载超时（秒），默认30分钟
+MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("TG_MAX_CONCURRENT", "3"))  # 最大并发下载数
 
 log = logging.getLogger("tg-bot")
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -294,8 +296,10 @@ def validate_ipa(path: Path, expected_size: int | None = None):
 
 async def scan_group(client, group_link, hours_back, whitelist, state,
                      rate_limit, priority_versions, priority_groups):
+    """扫描群组，收集待下载 IPA 列表（不下载，下载由 main 统一并发执行）。"""
     result = {"group": group_link, "total_msgs": 0, "ipa_found": 0,
-              "downloaded": [], "skipped": 0, "errors": [], "version_keys": set()}
+              "downloaded": [], "skipped": 0, "errors": [], "version_keys": set(),
+              "pending": []}
 
     try:
         entity = await client.get_entity(group_link)
@@ -374,7 +378,8 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
             result["skipped"] += 1; continue
 
         if today_count >= rate_limit["max_per_day"]:
-            log.warning(f"  已达今日上限{rate_limit['max_per_day']}"); break
+            log.warning(f"  已达今日上限{rate_limit['max_per_day']}")
+            break
 
         if part_path.exists():
             try:
@@ -382,61 +387,92 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
             except OSError:
                 pass
 
-        log.info(f"  下载: [{app_name}] {filename} ({size/1024/1024:.1f}MB)")
+        # 收集到待下载列表，不在这里下载
+        result["pending"].append({
+            "message": message, "filename": filename, "app_name": app_name,
+            "size": size, "unique_key": unique_key, "ver_key": ver_key,
+            "save_path": save_path, "part_path": part_path,
+            "caption_text": caption_text, "group_link": group_link,
+            "group_title": group_title, "message_id": message.id,
+        })
+        log.info(f"  待下载: [{app_name}] {filename} ({size/1024/1024:.1f}MB)")
+
+    return result
+
+
+async def download_one(client, item, state, semaphore, stop_event):
+    """并发下载单个 IPA。
+
+    FloodWait/PeerFlood → 设置 stop_event 阻止后续下载并 raise（由 main 捕获）。
+    其他错误（超时/校验失败）→ 返回 error dict，不影响其他下载。
+    """
+    if stop_event.is_set():
+        return {"status": "cancelled", "item": item}
+
+    async with semaphore:
+        if stop_event.is_set():
+            return {"status": "cancelled", "item": item}
+
+        filename = item["filename"]
+        part_path = item["part_path"]
+        save_path = item["save_path"]
+
+        # 并发场景下可能另一个任务刚下完同名文件
+        if save_path.exists():
+            ok, _ = validate_ipa(save_path, item["size"])
+            if ok:
+                log.info(f"  跳过（已被并发任务下载）: {filename}")
+                return {"status": "skipped", "item": item}
+
+        log.info(f"  下载: [{item['app_name']}] {filename} ({item['size']/1024/1024:.1f}MB)")
         try:
             await asyncio.wait_for(
-                client.download_media(message, file=str(part_path)),
-                timeout=600,  # 单文件 10 分钟超时，避免卡死拖垮整个扫描
+                client.download_media(item["message"], file=str(part_path)),
+                timeout=DOWNLOAD_TIMEOUT,
             )
-            ok, reason = validate_ipa(part_path, size)
+            ok, reason = validate_ipa(part_path, item["size"])
             if not ok:
                 raise RuntimeError(reason)
             part_path.replace(save_path)
-            downloaded_set.add(unique_key)
+
+            unique_key = item["unique_key"]
             if unique_key not in state["downloaded_files"]:
                 state["downloaded_files"].append(unique_key)
-            today_count += 1
-            result["downloaded"].append({
-                "app": app_name, "filename": filename,
-                "size_mb": round(size/1024/1024, 1), "ver_key": ver_key,
-            })
-            result["version_keys"].add(ver_key)
-            # 记录"破解点 / 版本说明"，由 scanner.py 写入 repo.json，WebUI 也会读
+            state.setdefault("downloaded_versions", {})[item["ver_key"]] = item["group_link"]
+
+            # 记录"破解点 / 版本说明"
             try:
-                msg_text = caption_text
-                source_url = ""
-                try:
-                    source_url = f"{group_link.rstrip('/')}/{message.id}" if group_link.startswith("http") else ""
-                except Exception:
-                    source_url = ""
-                ipa_desc.remember_from_message(save_path.name, msg_text, source_url)
+                gl = item["group_link"]
+                source_url = f"{gl.rstrip('/')}/{item['message_id']}" if gl.startswith("http") else ""
+                ipa_desc.remember_from_message(save_path.name, item["caption_text"], source_url)
             except Exception as _e:
                 log.warning(f"  记录 IPA 描述失败: {_e}")
+
             log.info(f"  OK: {save_path.name}")
-            sleep_sec = random.randint(rate_limit["min_interval_sec"], rate_limit["max_interval_sec"])
-            log.info(f"  等待 {sleep_sec}s..."); await asyncio.sleep(sleep_sec)
+            return {"status": "ok", "item": item}
+
         except FloodWaitError as e:
             log.error(f"  FloodWait! 需等{e.seconds}s，紧急停机")
-            result["errors"].append(f"FloodWait: {e.seconds}s"); raise
+            stop_event.set()
+            raise
         except PeerFloodError as e:
             log.error(f"  PeerFlood! 账号可能被风控")
-            result["errors"].append(f"PeerFlood: {e}"); raise
+            stop_event.set()
+            raise
         except asyncio.TimeoutError:
             try:
                 part_path.unlink()
             except OSError:
                 pass
-            log.error(f"  下载超时（10分钟）: {filename}")
-            result["errors"].append(f"{filename}: 下载超时")
+            log.error(f"  下载超时（{DOWNLOAD_TIMEOUT}秒）: {filename}")
+            return {"status": "timeout", "item": item}
         except Exception as e:
             try:
                 part_path.unlink()
             except OSError:
                 pass
             log.error(f"  下载失败: {e}")
-            result["errors"].append(f"{filename}: {e}")
-
-    return result
+            return {"status": "error", "item": item, "error": str(e)}
 
 
 async def main():
@@ -481,6 +517,7 @@ async def main():
             for vk in state["downloaded_versions"].keys():
                 priority_versions.add(vk)
 
+        # ---- 扫描阶段：遍历所有群，收集待下载列表 ----
         all_results = []
         for group in sorted_groups:
             try:
@@ -495,9 +532,52 @@ async def main():
                     state.setdefault("downloaded_versions", {})[vk] = group
                 save_state(state)
             except (FloodWaitError, PeerFloodError):
-                log.error("风控触发，提前结束"); break
+                log.error("风控触发，提前结束扫描"); break
             except Exception as e:
                 log.error(f"扫描{group}异常: {e}")
+
+        # ---- 并发下载阶段 ----
+        all_pending = []
+        for result in all_results:
+            all_pending.extend(result.get("pending", []))
+
+        if all_pending:
+            log.info(f"开始并发下载 {len(all_pending)} 个 IPA（最多 {MAX_CONCURRENT_DOWNLOADS} 并发，单文件超时 {DOWNLOAD_TIMEOUT}秒）")
+            semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+            stop_event = asyncio.Event()
+            download_tasks = [
+                asyncio.create_task(download_one(client, item, state, semaphore, stop_event))
+                for item in all_pending
+            ]
+            download_results = await asyncio.gather(*download_tasks, return_exceptions=True)
+
+            # 处理下载结果，回填到各群的 result
+            for i, dr in enumerate(download_results):
+                item = all_pending[i]
+                group_result = next((r for r in all_results if r["group"] == item["group_link"]), None)
+                if group_result is None:
+                    continue
+
+                if isinstance(dr, Exception):
+                    # FloodWait / PeerFlood（stop_event 已设置）
+                    group_result["errors"].append(f"{item['filename']}: 风控停机")
+                elif isinstance(dr, dict):
+                    status = dr["status"]
+                    if status == "ok":
+                        group_result["downloaded"].append({
+                            "app": item["app_name"], "filename": item["filename"],
+                            "size_mb": round(item["size"]/1024/1024, 1),
+                            "ver_key": item["ver_key"],
+                        })
+                        group_result["version_keys"].add(item["ver_key"])
+                    elif status == "timeout":
+                        group_result["errors"].append(f"{item['filename']}: 下载超时")
+                    elif status == "error":
+                        group_result["errors"].append(f"{item['filename']}: {dr.get('error', '未知错误')}")
+                    # skipped / cancelled: 不记录
+            save_state(state)
+        else:
+            log.info("本次扫描无需下载新 IPA")
 
         total_dl = sum(len(r["downloaded"]) for r in all_results)
         total_skipped = sum(r["skipped"] for r in all_results)

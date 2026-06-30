@@ -65,7 +65,7 @@
 - 计划采样粒度：每个有意义的功能/修复一次提交；高风险点（鉴权 / repo.json / 卷挂载）单独成 commit。
 - 采样间状态外部化：
   - 短期：commit message + 本仓库 `README` / `DOCKERHUB_README`
-  - 长期：`~/Documents/obsidian/Codex/ipaes/`
+  - 长期：`~/obsidian/Codex/ipaes/`
 
 ## 5. 控制律（Control Law）
 
@@ -119,4 +119,4 @@
 - 教训归宿：
   - 通用工程教训 → `~/.codex/AGENTS.md` 或 Memory
   - 项目专有约束 → 本文件 + `AGENTS.md` overrides
-  - 决策与里程碑 → `~/Documents/obsidian/Codex/ipaes/`
+  - 决策与里程碑 → `~/obsidian/Codex/ipaes/`

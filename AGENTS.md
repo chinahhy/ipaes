@@ -10,7 +10,7 @@ contract.
 - Meta-project source of truth: `~/Documents/Codex/控制中心`
 - Runtime Skill: `engineering-cybernetics` (auto-triggers by description)
 - Project control-loop spec: see `CONTROL-LOOP.md` at the repo root
-- Project lifecycle records: `~/Documents/obsidian/Codex/<project>/`
+- Project lifecycle records: `~/obsidian/Codex/<project>/`
 
 Project-specific overrides below this section take precedence over the
 global rules; write them only when the project genuinely needs to deviate.
@@ -27,4 +27,4 @@ global rules; write them only when the project genuinely needs to deviate.
 ## Lifecycle records
 
 - 项目目录：`~/Documents/Codex/ipaes/`
-- Obsidian 记录：`~/Documents/obsidian/Codex/ipaes/`（按需建立）
+- Obsidian 记录：`~/obsidian/Codex/ipaes/`（按需建立）
