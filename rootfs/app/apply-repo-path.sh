@@ -37,17 +37,28 @@ export REPO_BASE_URL="$FINAL_URL"
 echo "🔗 [apply-repo-path] REPO_PATH=${REPO_PATH:-<root>}"
 echo "📦 [apply-repo-path] FINAL_URL=$FINAL_URL"
 
+cron_quote() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+CRON_REPO_BASE_URL=$(cron_quote "$REPO_BASE_URL")
+CRON_IPA_ACCESS_TOKEN=$(cron_quote "${IPA_ACCESS_TOKEN:-}")
+CRON_TG_PROXY=$(cron_quote "${TG_PROXY:-}")
+CRON_TG_SCAN_HOURS=$(cron_quote "${TG_SCAN_HOURS:-25}")
+CRON_REPO_NAME=$(cron_quote "${REPO_NAME:-Private IPA Repo}")
+CRON_REPO_IDENTIFIER=$(cron_quote "${REPO_IDENTIFIER:-com.private.ipa.repo}")
+
 # === 写 cron ===
 cat > /etc/cron.d/ipaes <<EOF
 # IPA Self-Host TG 自动扫描
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-REPO_BASE_URL=$REPO_BASE_URL
-IPA_ACCESS_TOKEN=${IPA_ACCESS_TOKEN:-}
-TG_PROXY=${TG_PROXY:-}
-TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}
-REPO_NAME=${REPO_NAME:-Private IPA Repo}
-REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}
+REPO_BASE_URL="$CRON_REPO_BASE_URL"
+IPA_ACCESS_TOKEN="$CRON_IPA_ACCESS_TOKEN"
+TG_PROXY="$CRON_TG_PROXY"
+TG_SCAN_HOURS="$CRON_TG_SCAN_HOURS"
+REPO_NAME="$CRON_REPO_NAME"
+REPO_IDENTIFIER="$CRON_REPO_IDENTIFIER"
 
 ${TG_SCAN_CRON:-0 1 * * *} root /app/run-tg-scan.sh
 EOF

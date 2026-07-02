@@ -17,7 +17,6 @@ services:
       - REPO_BASE_URL=${REPO_BASE_URL}
       - REPO_NAME=My IPA Repo
       - REPO_IDENTIFIER=com.example.ipa.repo
-      - TG_PROXY=
-      - TG_SCAN_CRON=0 17 * * *
+      - TG_SCAN_CRON=0 1,13 * * *
       - TG_SCAN_HOURS=25
       - TZ=Asia/Shanghai

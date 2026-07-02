@@ -4,14 +4,14 @@ Telegram IPA Scanner - cron 触发，按白名单下载IPA
 配置全部来自 /config/config.json + 环境变量
 
 环境变量:
-  TG_PROXY      - socks5://host:port，可空（直连）
+  TG_PROXY      - socks5://host:port 或 http://host:port，可空（直连）
   TG_SCAN_HOURS - 回溯小时数（默认25）
   TG_SCAN_LIMIT - 每个群最多读取消息数（默认500）
 """
 import asyncio, json, logging, os, random, re, sys, zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse, urlunparse
 
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError, PeerFloodError
@@ -36,12 +36,52 @@ BOT_COMMANDS = [
     {"command": "help", "description": "使用说明"},
 ]
 
-# 解析代理环境变量 socks5://host:port → ("socks5", host, port)
+# 解析代理环境变量 socks5/http URL → Telethon 兼容 proxy tuple。
 def parse_proxy(proxy_url: str):
-    if not proxy_url: return None
+    if not proxy_url:
+        return None
     p = urlparse(proxy_url)
     scheme = (p.scheme or "socks5").lower()
-    return (scheme, p.hostname, p.port or 1080)
+    host = p.hostname
+    if not host:
+        return None
+    port = p.port or (7890 if scheme.startswith("http") else 1080)
+    username = unquote(p.username) if p.username else None
+    password = unquote(p.password) if p.password else None
+
+    proxy_type = scheme
+    try:
+        import socks  # type: ignore
+        if scheme in ("socks5", "socks5h"):
+            proxy_type = socks.SOCKS5
+        elif scheme == "socks4":
+            proxy_type = socks.SOCKS4
+        elif scheme in ("http", "https"):
+            proxy_type = socks.HTTP
+    except Exception:
+        if scheme == "https":
+            proxy_type = "http"
+
+    if username or password:
+        return (proxy_type, host, port, True, username, password)
+    return (proxy_type, host, port)
+
+def redact_proxy_url(proxy_url: str):
+    if not proxy_url:
+        return ""
+    try:
+        p = urlparse(proxy_url)
+        if not (p.username or p.password):
+            return proxy_url
+        host = p.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        netloc = f"***@{host}"
+        if p.port:
+            netloc += f":{p.port}"
+        return urlunparse((p.scheme, netloc, p.path, p.params, p.query, p.fragment))
+    except Exception:
+        return "<invalid proxy url>"
 
 def load_proxy_url():
     if PROXY_CONFIG_PATH.exists():
@@ -54,7 +94,8 @@ def load_proxy_url():
             pass
     return os.environ.get("TG_PROXY", "")
 
-PROXY = parse_proxy(load_proxy_url())
+PROXY_URL = load_proxy_url()
+PROXY = parse_proxy(PROXY_URL)
 SCAN_HOURS = int(os.environ.get("TG_SCAN_HOURS", "25"))
 SCAN_LIMIT = int(os.environ.get("TG_SCAN_LIMIT", "500"))
 DOWNLOAD_TIMEOUT = int(os.environ.get("TG_DOWNLOAD_TIMEOUT", "1800"))  # 单文件下载超时（秒），默认30分钟
@@ -159,22 +200,60 @@ def version_label(filename):
         return "v" + m.group(1)
     return "新版本"
 
-def build_notification_text(downloaded, total_ipa, total_dl, total_skipped, errors_count):
-    lines = [f"入库 {total_dl} 个"]
-    for item in downloaded[:10]:
-        lines.append(f"{item['app']} {version_label(item['filename'])}  {item['size_mb']}MB")
-    if len(downloaded) > 10:
-        lines.append(f"...还有 {len(downloaded) - 10} 个")
+def compact_text(value, limit=76):
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+def build_notification_text(
+    downloaded, total_ipa, total_dl, total_skipped, errors_count,
+    groups_count=0, total_msgs=0,
+):
+    scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    status = "🚀 有新包入库" if total_dl else "🟢 仓库已是最新"
+    lines = [
+        "📦 IPAes 扫描报告",
+        f"🕐 {scan_time}",
+        "",
+        f"状态：{status}",
+        f"扫描：{groups_count} 个群 / {total_msgs} 条消息",
+        f"结果：发现 {total_ipa} 个 IPA / 入库 {total_dl} 个 / 跳过 {total_skipped} 个 / 异常 {errors_count} 个",
+    ]
+
+    if downloaded:
+        lines.extend(["", "🎁 新鲜上架"])
+        for idx, item in enumerate(downloaded[:8], start=1):
+            lines.append(
+                f"{idx}. {compact_text(item['app'], 24)} · {version_label(item['filename'])} · {item['size_mb']} MB"
+            )
+            lines.append(f"   {compact_text(item['filename'], 72)}")
+        if len(downloaded) > 8:
+            lines.append(f"   ...还有 {len(downloaded) - 8} 个新包，详情看 tg-cron.log")
+    else:
+        lines.extend([
+            "",
+            "🧊 本轮没有新包",
+            "白名单命中的版本都已经在库里；这次只是例行巡检。"
+        ])
+
     if errors_count:
-        lines.append(f"异常 {errors_count} 个")
+        lines.extend([
+            "",
+            f"⚠️ 有 {errors_count} 个异常项，建议查看 /logs/tg-cron.log。"
+        ])
+
+    lines.extend(["", "下次仍按 TG_SCAN_CRON 自动巡检。"])
     return "\n".join(lines)
 
 async def send_scan_notification(config, all_results, total_ipa, total_dl, total_skipped):
     downloaded = [item for result in all_results for item in result.get("downloaded", [])]
-    log.info(f"通知准备: total_ipa={total_ipa}, total_dl={total_dl}, downloaded_count={len(downloaded)}")
-    if not downloaded:
-        log.info("Bot 通知跳过：本次无新增入库")
-        return
+    errors_count = sum(len(result.get("errors", [])) for result in all_results)
+    total_msgs = sum(result.get("total_msgs", 0) for result in all_results)
+    log.info(
+        "通知准备: total_ipa=%s, total_dl=%s, total_skipped=%s, errors=%s, downloaded_count=%s",
+        total_ipa, total_dl, total_skipped, errors_count, len(downloaded),
+    )
     bot = notification_bot_config(config)
     log.info(
         "Bot 通知配置: enabled=%s, has_token=%s, chat_ids=%s",
@@ -187,8 +266,10 @@ async def send_scan_notification(config, all_results, total_ipa, total_dl, total
         await ensure_bot_menu(config)
     except Exception as e:
         log.warning(f"同步 Bot 菜单失败（忽略，继续发通知）: {e!r}")
-    errors_count = sum(len(result.get("errors", [])) for result in all_results)
-    text = build_notification_text(downloaded, total_ipa, total_dl, total_skipped, errors_count)
+    text = build_notification_text(
+        downloaded, total_ipa, total_dl, total_skipped, errors_count,
+        groups_count=len(all_results), total_msgs=total_msgs,
+    )
     for chat_id in bot["chat_ids"]:
         try:
             await telegram_bot_api(bot["token"], "sendMessage", {
@@ -304,6 +385,7 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
     try:
         entity = await client.get_entity(group_link)
         group_title = getattr(entity, "title", group_link)
+        result["group_title"] = group_title
     except Exception as e:
         log.error(f"无法访问群 {group_link}: {e}")
         result["errors"].append(f"无法访问: {e}")
@@ -490,7 +572,11 @@ async def main():
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True) if not DOWNLOAD_DIR.exists() else None
     log.info("=" * 60)
     log.info(f"TG扫描开始，回溯{SCAN_HOURS}小时，每群最多{SCAN_LIMIT}条消息")
-    log.info(f"代理: {PROXY or '直连'}")
+    if PROXY_URL:
+        log.info(f"代理URL: {redact_proxy_url(PROXY_URL)}")
+        log.info(f"代理解析: {PROXY or '无效，按直连处理'}")
+    else:
+        log.info("代理: 直连")
 
     client = TelegramClient(
         str(SESSION_PATH), api_id, api_hash,
