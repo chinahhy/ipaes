@@ -1,10 +1,24 @@
 {% extends "_layout.html" %}
 {% block content %}
-  <section class="view" x-cloak x-transition.opacity.duration.150ms>
-    <div class="panel">
+  <section class="view logs-view" x-cloak x-transition.opacity.duration.150ms>
+    <div class="workspace-head">
+      <div class="workspace-title">
+        <h1>日志</h1>
+        <p x-text="logName === 'tg-cron' ? 'TG 扫描' : (logName === 'scanner' ? '仓库扫描' : 'Nginx 错误')"></p>
+      </div>
+      <div class="workspace-kpis">
+        <div class="kpi-chip">
+          <strong x-text="(logContent || '').split('\n').filter(Boolean).length"></strong>
+          <span>行</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel logs-panel">
       <div class="panel-head">
         <div class="head-block">
           <h2>日志</h2>
+          <span x-text="logName === 'tg-cron' ? 'TG 扫描' : (logName === 'scanner' ? '仓库扫描' : 'Nginx 错误')"></span>
         </div>
         <div class="log-tools">
           <select x-model="logName" @change="loadLog()">

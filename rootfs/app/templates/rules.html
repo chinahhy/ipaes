@@ -1,8 +1,29 @@
 {% extends "_layout.html" %}
 {% block content %}
-  <section class="view" x-cloak x-transition.opacity.duration.150ms>
-    <div class="grid rules">
-      <div class="panel">
+  <section class="view rules-view" x-cloak x-transition.opacity.duration.150ms>
+    <div class="workspace-head">
+      <div class="workspace-title">
+        <h1>规则</h1>
+        <p>Telegram 来源与 APP 入库筛选</p>
+      </div>
+      <div class="workspace-kpis">
+        <div class="kpi-chip accent">
+          <strong x-text="(cfg.groups || []).length"></strong>
+          <span>来源</span>
+        </div>
+        <div class="kpi-chip">
+          <strong x-text="(cfg.priority_groups || []).length"></strong>
+          <span>优先</span>
+        </div>
+        <div class="kpi-chip">
+          <strong x-text="(cfg.whitelist || []).length"></strong>
+          <span>APP</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rules-layout">
+      <div class="panel rules-sources-panel">
         <div class="panel-head">
           <div class="head-block">
             <h2>群组</h2>
@@ -44,7 +65,7 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel rules-main-panel">
         <div class="panel-head">
           <div class="head-block">
             <h2>白名单</h2>
