@@ -887,13 +887,15 @@
     border:1px solid var(--line);
     border-radius:14px;
     background:linear-gradient(180deg, var(--panel), var(--panel-2));
-    overflow:visible;
+    overflow:hidden;
     transition:border-color .18s ease, transform .18s ease, box-shadow .18s ease;
   }
   .app-row.expanded {
-    z-index:30;
     border-color:var(--accent);
     box-shadow:0 18px 40px rgba(0,0,0,.22);
+  }
+  .app-row.expanded .app-main {
+    border-bottom:1px solid var(--line);
   }
   .app-row:hover {
     transform:translateY(-1px);
@@ -989,37 +991,44 @@
   }
   .chev.open { transform:rotate(90deg) }
   .version-list {
-    position:absolute;
-    left:12px;
-    right:12px;
-    top:calc(100% - 8px);
-    z-index:12;
+    position:relative;
+    margin:0;
     max-height:0;
     opacity:0;
     pointer-events:none;
-    transform:translateY(-6px) scale(.99);
+    transform:translateY(-4px);
     overflow:hidden;
-    border:1px solid var(--line);
-    border-radius:16px;
-    background:var(--panel);
-    box-shadow:0 18px 38px rgba(0,0,0,.24);
+    background:linear-gradient(180deg, var(--panel-2), var(--panel));
     transition:max-height .22s ease, opacity .18s ease, transform .18s ease;
+    scrollbar-width:thin;
+    scrollbar-color:var(--line-2) transparent;
+  }
+  .version-list::-webkit-scrollbar {
+    width:6px;
+  }
+  .version-list::-webkit-scrollbar-track {
+    background:transparent;
+  }
+  .version-list::-webkit-scrollbar-thumb {
+    border-radius:999px;
+    background:var(--line-2);
   }
   .version-list.open {
-    max-height:min(380px, 55vh);
+    max-height:min(520px, 58vh);
     opacity:1;
     pointer-events:auto;
-    transform:translateY(0) scale(1);
+    transform:translateY(0);
     overflow:auto;
   }
   .version-row {
     display:grid;
     grid-template-columns:minmax(0,1fr) auto;
-    gap:12px;
-    align-items:start;
-    padding:12px 16px 14px;
+    gap:14px;
+    align-items:center;
+    padding:12px 14px;
     border-top:1px solid var(--line);
     font-size:12px;
+    background:transparent;
   }
   .version-row:first-child {
     border-top:0;
@@ -1030,6 +1039,7 @@
   .version-row .ver {
     font-weight:800;
     color:var(--text);
+    font-size:13px;
   }
   .version-row .file {
     display:block;
@@ -1046,9 +1056,26 @@
     align-items:center;
     gap:8px;
   }
+  .version-title {
+    min-width:0;
+    flex-wrap:wrap;
+  }
+  .version-subline {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top:3px;
+    color:var(--muted);
+    font-size:11px;
+    line-height:1.45;
+  }
+  .version-subline span:first-child {
+    color:var(--text-2);
+  }
   .version-actions {
     justify-content:flex-end;
-    flex-wrap:wrap;
+    flex-wrap:nowrap;
   }
   .bad-badge {
     padding:2px 7px;
@@ -1070,7 +1097,7 @@
     display:flex;
     flex-wrap:wrap;
     gap:6px;
-    margin-top:8px;
+    margin-top:7px;
     align-items:center;
   }
   .highlight-tag {
@@ -1093,6 +1120,14 @@
     padding:2px 8px;
     font-size:11px;
     border-radius:8px;
+  }
+  .btn.icon.xs {
+    width:26px;
+    min-height:26px;
+    padding:0;
+  }
+  .edit-desc {
+    color:var(--muted);
   }
 
   /* 描述编辑 modal */
@@ -1627,7 +1662,7 @@
       height:54px;
     }
     .version-row {
-      grid-template-columns:1fr;
+      grid-template-columns:minmax(0,1fr) auto;
     }
     .version-row .file {
       grid-column:auto;
@@ -1637,7 +1672,7 @@
       color:var(--muted);
     }
     .version-actions {
-      justify-content:flex-start;
+      justify-content:flex-end;
     }
   }
   @media (max-width:720px) {
@@ -1701,6 +1736,14 @@
       left:12px;
       bottom:12px;
       max-width:none;
+    }
+  }
+  @media (max-width:420px) {
+    .version-row {
+      grid-template-columns:1fr;
+    }
+    .version-actions {
+      justify-content:flex-start;
     }
   }
 </style>

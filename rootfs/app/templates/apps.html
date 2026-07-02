@@ -135,15 +135,23 @@
                         <span class="bad-badge" x-show="v.scan_status==='invalid'" x-cloak>损坏</span>
                         <span class="bad-badge warn" x-show="v.scan_status==='unscanned'" x-cloak>未入库</span>
                       </div>
+                      <div class="version-subline">
+                        <span x-show="versionTail(app, v)" x-cloak x-text="versionTail(app, v)"></span>
+                        <span x-text="[(v.size_mb ? v.size_mb + ' MB' : ''), (v.mtime_str || '')].filter(Boolean).join(' · ')"></span>
+                      </div>
                       <div class="version-highlights" x-show="(v.highlights || []).length" x-cloak>
                         <template x-for="h in (v.highlights || [])" :key="h">
                           <span class="highlight-tag" x-text="h"></span>
                         </template>
-                        <button type="button" class="btn ghost xs" @click.stop="openDescEditor(v)" title="编辑这条破解点说明">编辑</button>
+                        <button type="button" class="btn ghost xs icon edit-desc" @click.stop="openDescEditor(v)" title="编辑破解点说明" aria-label="编辑破解点说明">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                        </button>
                       </div>
                       <div class="version-highlights muted" x-show="!(v.highlights || []).length" x-cloak>
-                        <span class="highlight-empty">暂无破解点说明</span>
-                        <button type="button" class="btn ghost xs" @click.stop="openDescEditor(v)" title="手动补充破解点说明">补充</button>
+                        <span class="highlight-empty">暂无说明</span>
+                        <button type="button" class="btn ghost xs icon edit-desc" @click.stop="openDescEditor(v)" title="补充破解点说明" aria-label="补充破解点说明">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                        </button>
                       </div>
                     </div>
                     <div class="version-actions">
