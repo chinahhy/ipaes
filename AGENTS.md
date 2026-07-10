@@ -22,7 +22,8 @@ global rules; write them only when the project genuinely needs to deviate.
 - **保持单镜像单容器形态**：不要引入新的 service（数据库、独立 worker 等）；新增功能优先合入现有 supervisord 进程组。
 - **真实 IPA / TG session / .env / config/ 永不入库**：`.gitignore` 已覆盖；CI 触发器仅在 `Dockerfile`、`.dockerignore`、`rootfs/**`、workflow 自身改动时构建镜像，文档与 compose 改动不构建。
 - **图标资产**：`rootfs/app/webui_static/` 下的 `favicon.ico` / `icon-192.png` / `icon-512.png` / `icon-sunpanel.png` / `brand-icon.*` 是项目自有 mascot，禁止替换为受版权保护的第三方品牌素材。
-- **远端部署**：默认 `homelab-nas` 的 Docker；任何远端服务重启 / 卷迁移 / 反代变更前先用无害命令探活并征得确认。
+- **NAS 部署语义**：用户说“本地容器”或“本地 NAS”时，默认指家用 NAS 上的 `ipaes` 容器；SSH 使用本机配置中的 `nas` 别名，不要按当前 Mac 的 Docker 环境处理。
+- **远端部署**：默认 `nas` 的 Docker；任何远端服务重启 / 卷迁移 / 反代变更前先用无害命令探活并征得确认。
 
 ## Lifecycle records
 
