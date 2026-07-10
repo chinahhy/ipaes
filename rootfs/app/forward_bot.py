@@ -17,6 +17,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
+from ipa_matcher import display_app_name, filename_app_name, match_whitelist
 
 # ===== 配置 =====
 CFG_PATH = Path("/config/forward_bot.json")
@@ -205,14 +206,20 @@ def build_help_text() -> str:
         "也可以直接转发 IPA 文件，或发送包含 `.ipa` 文件名和下载链接的文本。"
     )
 
-# ===== IPA 文件名匹配 =====
-def match_whitelist(filename: str, message_text: str, whitelist: list) -> str | None:
-    text = f"{filename} {message_text or ''}"
-    for app in whitelist:
-        for kw in app.get("keywords", []):
-            if kw.lower() in text.lower():
-                return app["name"]
-    return None
+def append_match_lines(lines: list[str], filename: str, app_name: str) -> None:
+    display_name = display_app_name(filename, app_name)
+    if display_name and display_name != app_name:
+        lines.append(f"应用：`{display_name}`")
+        lines.append(f"规则：✅ *{app_name}*")
+    else:
+        lines.append(f"匹配：✅ *{app_name}*")
+
+
+def match_summary(filename: str, app_name: str) -> str:
+    display_name = display_app_name(filename, app_name)
+    if display_name and display_name != app_name:
+        return f"{display_name}（规则：{app_name}）"
+    return app_name
 
 def extract_version_key(filename: str) -> str:
     name = filename.rsplit(".", 1)[0] if "." in filename else filename
@@ -347,7 +354,7 @@ async def handle_text_msg(bot: TGClient, chat_id: int, msg_id: int, text: str):
     whitelist = load_whitelist()
     app_name = match_whitelist(filename, text, whitelist)
     if not app_name:
-        filename_base = re.sub(r'[_-]?\d[\d.]*\d.*', '', filename.rsplit('.', 1)[0]) or filename.rsplit('.', 1)[0]
+        filename_base = filename_app_name(filename) or filename.rsplit('.', 1)[0]
         try:
             cfg = json.loads(open(WL_PATH).read())
             cfg.setdefault("whitelist", [])
@@ -369,7 +376,8 @@ async def handle_text_msg(bot: TGClient, chat_id: int, msg_id: int, text: str):
 
     wh_result = check_warehouse(filename)
 
-    lines = [f"📦 *解析到 IPA*", f"", f"文件：`{filename}`", f"匹配：✅ *{app_name}*"]
+    lines = [f"📦 *解析到 IPA*", f"", f"文件：`{filename}`"]
+    append_match_lines(lines, filename, app_name)
     if urls:
         short_url = urls[0][:60] + ("..." if len(urls[0]) > 60 else "")
         lines.append(f"链接：{short_url}")
@@ -405,7 +413,7 @@ async def handle_document_msg(bot: TGClient, chat_id: int, msg_id: int, doc: dic
     whitelist = load_whitelist()
     app_name = match_whitelist(filename, caption, whitelist)
     if not app_name:
-        filename_base = re.sub(r'[_-]?\d[\d.]*\d.*', '', filename.rsplit('.', 1)[0]) or filename.rsplit('.', 1)[0]
+        filename_base = filename_app_name(filename) or filename.rsplit('.', 1)[0]
         try:
             cfg = json.loads(open(WL_PATH).read())
             cfg.setdefault("whitelist", [])
@@ -452,7 +460,8 @@ async def handle_document_msg(bot: TGClient, chat_id: int, msg_id: int, doc: dic
 
     header = "📦 *t.me 转发解析成功*" if fwd_channel else "📦 *收到 IPA 文件*"
     lines = [header, f"",
-             f"文件：`{filename}`", f"大小：{size_mb:.1f}MB", f"匹配：✅ *{app_name}*"]
+             f"文件：`{filename}`", f"大小：{size_mb:.1f}MB"]
+    append_match_lines(lines, filename, app_name)
     if fwd_channel:
         lines.append(f"来源：`@{fwd_label}/{fwd_msg_id}`")
 
@@ -578,7 +587,7 @@ async def handle_tme_link(bot: TGClient, chat_id: int, msg_id: int, channel: str
         whitelist = load_whitelist()
         app_name = match_whitelist(filename, caption, whitelist)
         if not app_name:
-            filename_base = re.sub(r'[_-]?\d[\d.]*\d.*', '', filename.rsplit('.', 1)[0]) or filename.rsplit('.', 1)[0]
+            filename_base = filename_app_name(filename) or filename.rsplit('.', 1)[0]
             try:
                 cfg = json.loads(open(WL_PATH).read())
                 cfg.setdefault("whitelist", [])
@@ -599,8 +608,8 @@ async def handle_tme_link(bot: TGClient, chat_id: int, msg_id: int, channel: str
 
         lines = [f"📦 *t.me 链接解析成功*", "",
                  f"文件：`{filename}`",
-                 f"大小：{size_mb:.1f}MB" if size_mb else "大小：未知",
-                 f"匹配：✅ *{app_name}*"]
+                 f"大小：{size_mb:.1f}MB" if size_mb else "大小：未知"]
+        append_match_lines(lines, filename, app_name)
         if wh_result["exists"]:
             if wh_result["same_name"]:
                 lines.append("⚠️ 仓库已存在同名文件")
@@ -754,7 +763,9 @@ async def handle_callback(bot: TGClient, cb_id: str, chat_id: int, msg_id: int, 
 
     status = "已替换" if deleted else "已入库"
     lines = [f"✅ *{status}！*", f"",
-             f"文件：`{dest_path.name}`", f"大小：{actual_size / 1024 / 1024:.1f}MB", f"匹配：{app_name}"]
+             f"文件：`{dest_path.name}`",
+             f"大小：{actual_size / 1024 / 1024:.1f}MB",
+             f"匹配：{match_summary(dest_path.name, app_name)}"]
     if deleted:
         lines.append(f"")
         for d in deleted:

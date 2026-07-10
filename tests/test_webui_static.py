@@ -92,7 +92,8 @@ class WebuiStaticRegressionTests(unittest.TestCase):
         self.assertIsNotNone(subscription_input, "subscription URL input not found")
         assert subscription_input is not None
         self.assertIn('x-ref="repoUrlInput"', subscription_input.group(0))
-        self.assertIn('[readonly][x-ref="repoUrlInput"]', html)
+        self.assertIn("this.$refs && this.$refs.repoUrlInput", html)
+        self.assertIn("input.select();", html)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ from telethon.tl.types import DocumentAttributeFilename
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
+from ipa_matcher import display_app_name, match_whitelist
 
 CONFIG_PATH = Path("/config/config.json")
 FORWARD_BOT_CONFIG_PATH = Path("/config/forward_bot.json")
@@ -27,6 +28,16 @@ SESSION_PATH = Path("/session/tg-ipa-bot")
 LOG_PATH = Path(os.environ.get("TG_LOG_PATH", "/logs/tg-cron.log"))
 DOWNLOAD_DIR = Path("/data/ipa")
 STATE_PATH = Path("/config/state.json")
+NOTIFICATION_SNAPSHOT_PATH = Path(os.environ.get("TG_NOTIFY_SNAPSHOT_PATH", "/logs/tg-last-notification.txt"))
+FAILED_NOTIFICATION_PATH = Path(os.environ.get("TG_NOTIFY_FAILED_PATH", "/logs/tg-failed-notification.txt"))
+
+
+def env_int(name, default, min_value=1):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(min_value, value)
 
 BOT_COMMANDS = [
     {"command": "start", "description": "打开 IPA 小助手"},
@@ -100,6 +111,9 @@ SCAN_HOURS = int(os.environ.get("TG_SCAN_HOURS", "25"))
 SCAN_LIMIT = int(os.environ.get("TG_SCAN_LIMIT", "500"))
 DOWNLOAD_TIMEOUT = int(os.environ.get("TG_DOWNLOAD_TIMEOUT", "1800"))  # 单文件下载超时（秒），默认30分钟
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("TG_MAX_CONCURRENT", "3"))  # 最大并发下载数
+NOTIFY_TIMEOUT = env_int("TG_NOTIFY_TIMEOUT", 30)
+NOTIFY_RETRIES = env_int("TG_NOTIFY_RETRIES", 3)
+NOTIFY_RETRY_DELAY = env_int("TG_NOTIFY_RETRY_DELAY", 8)
 
 log = logging.getLogger("tg-bot")
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -171,16 +185,69 @@ def notification_bot_config(config):
         "chat_ids": deduped,
     }
 
-async def telegram_bot_api(token, method, payload):
+async def telegram_bot_api(token, method, payload, timeout=NOTIFY_TIMEOUT):
     import httpx
     proxy_url = load_proxy_url()
-    async with httpx.AsyncClient(proxy=proxy_url or None, timeout=18, follow_redirects=True) as client:
+    async with httpx.AsyncClient(proxy=proxy_url or None, timeout=timeout, follow_redirects=True) as client:
         resp = await client.post(f"https://api.telegram.org/bot{token}/{method}", json=payload)
         resp.raise_for_status()
         data = resp.json()
         if not data.get("ok"):
             raise RuntimeError(data.get("description") or str(data))
         return data.get("result")
+
+
+def is_retryable_bot_error(error):
+    import httpx
+    if isinstance(error, (httpx.ConnectTimeout, httpx.ConnectError, httpx.ProxyError, httpx.RemoteProtocolError)):
+        return True
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response is not None and error.response.status_code >= 500
+    return False
+
+
+def write_notification_snapshot(path, text, header=""):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        body = f"{header}\n{text}\n" if header else f"{text}\n"
+        path.write_text(body, encoding="utf-8")
+    except Exception as e:
+        log.warning(f"写入通知快照失败 {path}: {e!r}")
+
+
+async def send_bot_message_with_retry(token, chat_id, text):
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    last_error = None
+    for attempt in range(1, NOTIFY_RETRIES + 1):
+        try:
+            await telegram_bot_api(token, "sendMessage", payload)
+            if attempt > 1:
+                log.info(f"Bot 通知已发送: {chat_id}（第 {attempt} 次尝试）")
+            else:
+                log.info(f"Bot 通知已发送: {chat_id}")
+            return True
+        except Exception as e:
+            last_error = e
+            retryable = is_retryable_bot_error(e)
+            if attempt >= NOTIFY_RETRIES or not retryable:
+                break
+            log.warning(
+                "Bot 通知发送失败 %s: %r；%s 秒后重试（%s/%s）",
+                chat_id, e, NOTIFY_RETRY_DELAY, attempt, NOTIFY_RETRIES,
+            )
+            await asyncio.sleep(NOTIFY_RETRY_DELAY)
+
+    log.warning(f"Bot 通知发送失败 {chat_id}: {last_error!r}")
+    write_notification_snapshot(
+        FAILED_NOTIFICATION_PATH,
+        text,
+        header=f"failed_at={datetime.now().isoformat(timespec='seconds')} chat_id={chat_id} error={last_error!r}",
+    )
+    return False
 
 async def ensure_bot_menu(config):
     bot = notification_bot_config(config)
@@ -227,7 +294,6 @@ def build_notification_text(
             lines.append(
                 f"{idx}. {compact_text(item['app'], 24)} · {version_label(item['filename'])} · {item['size_mb']} MB"
             )
-            lines.append(f"   {compact_text(item['filename'], 72)}")
         if len(downloaded) > 8:
             lines.append(f"   ...还有 {len(downloaded) - 8} 个新包，详情看 tg-cron.log")
     else:
@@ -243,7 +309,6 @@ def build_notification_text(
             f"⚠️ 有 {errors_count} 个异常项，建议查看 /logs/tg-cron.log。"
         ])
 
-    lines.extend(["", "下次仍按 TG_SCAN_CRON 自动巡检。"])
     return "\n".join(lines)
 
 async def send_scan_notification(config, all_results, total_ipa, total_dl, total_skipped):
@@ -270,16 +335,9 @@ async def send_scan_notification(config, all_results, total_ipa, total_dl, total
         downloaded, total_ipa, total_dl, total_skipped, errors_count,
         groups_count=len(all_results), total_msgs=total_msgs,
     )
+    write_notification_snapshot(NOTIFICATION_SNAPSHOT_PATH, text)
     for chat_id in bot["chat_ids"]:
-        try:
-            await telegram_bot_api(bot["token"], "sendMessage", {
-                "chat_id": chat_id,
-                "text": text,
-                "disable_web_page_preview": True,
-            })
-            log.info(f"Bot 通知已发送: {chat_id}")
-        except Exception as e:
-            log.warning(f"Bot 通知发送失败 {chat_id}: {e!r}")
+        await send_bot_message_with_retry(bot["token"], chat_id, text)
 
 def load_state():
     if not STATE_PATH.exists():
@@ -290,14 +348,6 @@ def load_state():
 def save_state(state):
     with open(STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
-
-def match_whitelist(filename, message_text, whitelist):
-    text = f"{filename} {message_text or ''}"
-    for app in whitelist:
-        for kw in app["keywords"]:
-            if kw.lower() in text.lower():
-                return app["name"]
-    return None
 
 def extract_version_key(filename):
     name = filename.rsplit(".", 1)[0] if "." in filename else filename
@@ -651,7 +701,8 @@ async def main():
                     status = dr["status"]
                     if status == "ok":
                         group_result["downloaded"].append({
-                            "app": item["app_name"], "filename": item["filename"],
+                            "app": display_app_name(item["filename"], item["app_name"]),
+                            "filename": item["filename"],
                             "size_mb": round(item["size"]/1024/1024, 1),
                             "ver_key": item["ver_key"],
                         })
