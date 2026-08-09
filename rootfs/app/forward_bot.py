@@ -111,6 +111,15 @@ logging.basicConfig(
 log = logging.getLogger("forward-bot")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+
+def _format_exception_for_log(exc: BaseException, *_secrets: str) -> str:
+    """仅记录异常类型，不记录可能包含用户内容的异常消息。"""
+    exc_type = type(exc).__name__
+    if isinstance(exc, httpx.ReadTimeout) and exc.args == ("",):
+        return f"type={exc_type} detail=ReadTimeout('')"
+    return f"type={exc_type}"
+
+
 # ===== 白名单加载 =====
 def load_whitelist() -> list:
     try:
@@ -256,6 +265,18 @@ def get_file_size_str(path: Path) -> str:
 
 # ===== Telegram API 直接调用 =====
 API_BASE = "https://api.telegram.org"
+LONG_POLL_SECONDS = 10
+
+
+def _build_http_timeout(long_poll_seconds: float) -> httpx.Timeout:
+    """为长轮询预留充足读取时间，并显式限制其余网络阶段。"""
+    return httpx.Timeout(
+        connect=10.0,
+        read=float(long_poll_seconds) + 35.0,
+        write=10.0,
+        pool=10.0,
+    )
+
 
 class TGClient:
     """直接用 httpx 调用 Telegram Bot API，避免 python-telegram-bot 代理问题"""
@@ -263,7 +284,7 @@ class TGClient:
         self.token = token
         self.base = f"{API_BASE}/bot{token}"
         self.file_base = f"{API_BASE}/file/bot{token}"
-        kwargs = {"timeout": 30, "follow_redirects": True}
+        kwargs = {"timeout": _build_http_timeout(LONG_POLL_SECONDS), "follow_redirects": True}
         if proxy:
             kwargs["proxy"] = proxy
         self.client = httpx.AsyncClient(**kwargs)
@@ -279,7 +300,7 @@ class TGClient:
         return result.get("result", {})
 
     async def get_updates(self) -> list:
-        result = await self.api("getUpdates", {"timeout": 10, "offset": self.offset})
+        result = await self.api("getUpdates", {"timeout": LONG_POLL_SECONDS, "offset": self.offset})
         if result:
             self.offset = max(u["update_id"] for u in result) + 1
         return result
@@ -784,16 +805,24 @@ async def handle_callback(bot: TGClient, cb_id: str, chat_id: int, msg_id: int, 
 async def poll_loop(bot: TGClient):
     """自己管理 getUpdates 轮询"""
     log.info("轮询启动...")
+    last_success_log_at = None
+    health_log_interval = 300.0
     while True:
         try:
             updates = await bot.get_updates()
+            now = time.monotonic()
+            if last_success_log_at is None or now - last_success_log_at >= health_log_interval:
+                log.info(f"getUpdates 正常，收到 {len(updates)} 个 update")
+                last_success_log_at = now
             for u in updates:
                 try:
                     await process_update(bot, u)
                 except Exception as e:
                     log.error(f"处理 update 失败: {e}")
         except Exception as e:
-            log.error(f"getUpdates 失败: {e}")
+            log.error(
+                f"getUpdates 失败: {_format_exception_for_log(e, BOT_TK, PRX_URL)}"
+            )
             await asyncio.sleep(5)  # 出错后等5秒重试
             continue
         await asyncio.sleep(2)  # 每2秒轮询一次
