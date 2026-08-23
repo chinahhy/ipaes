@@ -34,6 +34,12 @@ else
 fi
 
 export REPO_BASE_URL="$FINAL_URL"
+# scanner 会在每次新进程启动时优先读取这个文件。必须先原子更新它，
+# 再 reload nginx / 触发 scanner；否则热更新当次扫描仍可能读取旧路径。
+_APPLIED_FILE="/tmp/repo_base_url.applied"
+_APPLIED_TMP="${_APPLIED_FILE}.$$"
+printf '%s\n' "$FINAL_URL" > "$_APPLIED_TMP"
+mv -f "$_APPLIED_TMP" "$_APPLIED_FILE"
 echo "🔗 [apply-repo-path] REPO_PATH=${REPO_PATH:-<root>}"
 echo "📦 [apply-repo-path] FINAL_URL=$FINAL_URL"
 
@@ -154,5 +160,4 @@ if [ "$NGINX_RUNNING" = "1" ] && [ -x /app/scanner.py ]; then
     echo "✅ [apply-repo-path] scanner.py 完成"
 fi
 
-# 把 FINAL_URL 写回给调用方读
-echo "$FINAL_URL" > /tmp/repo_base_url.applied
+# applied URL 已在生成配置和触发 scanner 之前原子写入。

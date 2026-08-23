@@ -30,7 +30,32 @@ def with_access_token(url: str) -> str:
     return url
 
 # ===== 配置（全部来自环境变量）=====
-BASE_URL = os.environ.get("REPO_BASE_URL", "https://example.com/repo").rstrip("/")
+def resolve_base_url(env_url=None, applied_path=None):
+    """返回当前实际生效的订阅 URL。
+
+    WebUI 热更新订阅路径时，apply-repo-path.sh 会更新
+    /tmp/repo_base_url.applied，但长期运行的 supervisor 子进程仍保留启动时的
+    REPO_BASE_URL。scanner 每次都是新进程，因此在启动时优先读取 applied 文件，
+    可避免 watcher/cron/WebUI 后续重扫把 repo.json 写回旧路径。
+    """
+    fallback = (
+        env_url
+        if env_url is not None
+        else os.environ.get("REPO_BASE_URL", "https://example.com/repo")
+    ).strip().rstrip("/")
+    path = Path(applied_path) if applied_path is not None else Path("/tmp/repo_base_url.applied")
+    try:
+        applied = path.read_text(encoding="utf-8").strip().rstrip("/")
+    except (OSError, UnicodeError):
+        return fallback
+
+    parsed = urlparse(applied)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return fallback
+    return applied
+
+
+BASE_URL = resolve_base_url()
 REPO_NAME = os.environ.get("REPO_NAME", "Private IPA Repo")
 REPO_IDENTIFIER = os.environ.get("REPO_IDENTIFIER", "com.private.ipa.repo")
 
