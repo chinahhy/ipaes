@@ -52,11 +52,16 @@ def _best_match_in(segment: str, whitelist: list, source_rank: int):
 
 
 def match_whitelist(filename: str, message_text: str, whitelist: list) -> Optional[str]:
-    """Return the whitelist app name that best matches this IPA candidate."""
+    """Return the whitelist app name matched from the IPA filename.
+
+    ``message_text`` is intentionally not used for admission. Telegram captions
+    are descriptive, untrusted metadata and can mention another whitelisted App
+    without identifying the attached IPA. Keeping the argument preserves the
+    existing caller API while preventing caption-only false-positive downloads.
+    """
     candidates = [
         _best_match_in(filename_app_name(filename), whitelist, 0),
         _best_match_in(filename, whitelist, 1),
-        _best_match_in(message_text or "", whitelist, 2),
     ]
     candidates = [c for c in candidates if c and c[1]]
     if not candidates:

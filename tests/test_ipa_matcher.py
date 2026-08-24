@@ -31,6 +31,29 @@ class IpaMatcherTests(unittest.TestCase):
             "PiliPlus",
         )
 
+    def test_caption_cannot_admit_a_different_app(self):
+        whitelist = [
+            {"name": "抖音", "keywords": ["抖音", "Douyin", "抖音短视频"]},
+        ]
+
+        self.assertIsNone(
+            match_whitelist(
+                "极光之恋_1.1.51_Release.ipa",
+                "极光之恋——抖音刷礼物模拟器",
+                whitelist,
+            )
+        )
+
+    def test_full_filename_still_matches_a_whitelist_alias(self):
+        whitelist = [
+            {"name": "抖音", "keywords": ["抖音", "Douyin", "抖音短视频"]},
+        ]
+
+        self.assertEqual(
+            match_whitelist("Package_1.0_抖音.ipa", "", whitelist),
+            "抖音",
+        )
+
     def test_display_name_uses_actual_package_prefix(self):
         self.assertEqual(
             display_app_name("PiliPlus_2.0.9_哔哩哔哩.ipa", "哔哩哔哩"),
