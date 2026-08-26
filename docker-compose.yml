@@ -19,4 +19,6 @@ services:
       - REPO_IDENTIFIER=com.example.ipa.repo
       - TG_SCAN_CRON=0 1,13 * * *
       - TG_SCAN_HOURS=25
+      - TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}
+      - TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}
       - TZ=Asia/Shanghai
