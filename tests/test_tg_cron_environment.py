@@ -27,12 +27,35 @@ class TgCronEnvironmentTests(unittest.TestCase):
         compose = COMPOSE_FILE.read_text(encoding="utf-8")
         env_example = ENV_EXAMPLE.read_text(encoding="utf-8")
 
-        self.assertIn(
-            'TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}', compose
-        )
-        self.assertIn('TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}', compose)
-        self.assertIn('TG_DOWNLOAD_TIMEOUT=3600', env_example)
-        self.assertIn('TG_MAX_CONCURRENT=1', env_example)
+        compose_defaults = {
+            'image: hoya0803/ipaes:${IPAES_TAG:-latest}',
+            '${HOST_PORT_NGINX:-8080}:80',
+            '${HOST_PORT_WEBUI:-8085}:8085',
+            '${IPA_DIR:-./data/ipa}:/data/ipa',
+            '${ICONS_DIR:-./data/icons}:/data/icons',
+            'REPO_NAME=${REPO_NAME:-Private IPA Repo}',
+            'REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}',
+            'TG_PROXY=${TG_PROXY:-}',
+            'TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}',
+            'TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}',
+            'TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}',
+            'TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}',
+            'TZ=${TZ:-Asia/Shanghai}',
+        }
+        for expected in compose_defaults:
+            self.assertIn(expected, compose)
+
+        env_defaults = {
+            'IPAES_TAG=latest',
+            'HOST_PORT_NGINX=8080',
+            'HOST_PORT_WEBUI=8085',
+            'IPA_DIR=./data/ipa',
+            'ICONS_DIR=./data/icons',
+            'TG_DOWNLOAD_TIMEOUT=3600',
+            'TG_MAX_CONCURRENT=1',
+        }
+        for expected in env_defaults:
+            self.assertIn(expected, env_example)
 
 
 if __name__ == "__main__":

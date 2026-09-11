@@ -37,7 +37,10 @@ cp .env.example .env
 | `TG_PROXY` | 否 | TG 代理，留空直连（格式 `socks5://host:port` 或 `http://host:port`） |
 | `TG_SCAN_CRON` | 否 | TG 扫描 cron 表达式（默认 `0 1 * * *`，每天 01:00） |
 | `TG_SCAN_HOURS` | 否 | 回溯小时数（默认 25） |
+| `TG_DOWNLOAD_TIMEOUT` | 否 | 单个 IPA 下载超时秒数（默认 3600） |
+| `TG_MAX_CONCURRENT` | 否 | 同时下载数（默认 1） |
 | `TZ` | 否 | 时区（默认 `Asia/Shanghai`） |
+| `IPAES_TAG` | 否 | 镜像标签（默认 `latest`，可固定为 `v2.4.0`） |
 
 如需自定义宿主机端口或 IPA/图标目录路径：
 
@@ -92,7 +95,7 @@ ipaes/
 - `8080` → nginx 源订阅入口（Esign/AltStore 访问）
 - `8085` → WebUI 管理界面
 
-**WebUI 可选不公开**：如果不希望 WebUI 对外暴露，可在 `.env` 中设置 `HOST_PORT_WEBUI=` 留空，或仅绑定 `127.0.0.1:8085:8085`。
+**WebUI 可选不公开**：如果不希望 WebUI 对外暴露，将 compose 中的 WebUI 端口映射改为 `127.0.0.1:${HOST_PORT_WEBUI:-8085}:8085`，或删除该映射。
 
 如果需要公网访问，推荐使用反向代理：
 
@@ -118,6 +121,9 @@ location / {
 ```bash
 # 升级
 docker compose pull && docker compose up -d
+
+# 固定到本次稳定版
+# 在 .env 中设置 IPAES_TAG=v2.4.0 后重建容器
 
 # 手动触发 TG 扫描
 docker exec ipaes /app/run-tg-scan.sh

@@ -1,24 +1,25 @@
 services:
   ipaes:
-    image: hoya0803/ipaes:latest
+    image: hoya0803/ipaes:${IPAES_TAG:-latest}
     container_name: ipaes
     restart: unless-stopped
     ports:
-      - "8084:80"
-      - "8085:8085"
+      - "${HOST_PORT_NGINX:-8080}:80"
+      - "${HOST_PORT_WEBUI:-8085}:8085"
     volumes:
-      - /your/path/to/ipa:/data/ipa
-      - /your/path/to/icons:/data/icons
+      - "${IPA_DIR:-./data/ipa}:/data/ipa"
+      - "${ICONS_DIR:-./data/icons}:/data/icons"
       - ./config:/config
       - ./session:/session
       - ./logs:/logs
       - ./data:/data
     environment:
       - REPO_BASE_URL=${REPO_BASE_URL}
-      - REPO_NAME=My IPA Repo
-      - REPO_IDENTIFIER=com.example.ipa.repo
-      - TG_SCAN_CRON=0 1,13 * * *
-      - TG_SCAN_HOURS=25
+      - REPO_NAME=${REPO_NAME:-Private IPA Repo}
+      - REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}
+      - TG_PROXY=${TG_PROXY:-}
+      - "TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}"
+      - TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}
       - TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}
       - TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}

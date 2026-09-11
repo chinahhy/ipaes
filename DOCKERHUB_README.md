@@ -28,7 +28,9 @@
 ```bash
 mkdir -p ipaes && cd ipaes
 curl -O https://raw.githubusercontent.com/chinahhy/ipaes/main/docker-compose.yml
-# 按需修改 docker-compose.yml 里的 REPO_BASE_URL 等环境变量
+curl -O https://raw.githubusercontent.com/chinahhy/ipaes/main/.env.example
+cp .env.example .env
+# 编辑 .env，至少设置 REPO_BASE_URL
 docker compose up -d
 ```
 
@@ -37,26 +39,29 @@ docker compose up -d
 ```yaml
 services:
   ipaes:
-    image: hoya0803/ipaes:latest
+    image: hoya0803/ipaes:${IPAES_TAG:-latest}
     container_name: ipaes
     restart: unless-stopped
     ports:
-      - "8084:80"
+      - "${HOST_PORT_NGINX:-8080}:80"
+      - "${HOST_PORT_WEBUI:-8085}:8085"
     volumes:
-      - ./config:/config          # TG api凭证 + 白名单
-      - ./session:/session        # TG 登录态
-      - ./logs:/logs              # 所有进程日志
-      - ./data:/data              # repo.json 自动生成
-      - /your/path/to/ipa:/data/ipa        # 你的IPA存放目录
-      - /your/path/to/icons:/data/icons    # 自动提取的图标
+      - "${IPA_DIR:-./data/ipa}:/data/ipa"
+      - "${ICONS_DIR:-./data/icons}:/data/icons"
+      - ./config:/config
+      - ./session:/session
+      - ./logs:/logs
+      - ./data:/data
     environment:
-      - TZ=Asia/Shanghai
-      - REPO_BASE_URL=https://your.domain.com/yourpath  # 公网订阅URL
-      - REPO_NAME=My Private IPA Repo
-      - REPO_IDENTIFIER=com.example.ipa.repo
-      - TG_PROXY=socks5://proxy.example.com:1080  # 可空，留空表示直连
-      - TG_SCAN_CRON=0 1 * * *             # 每天凌晨1点扫描
-      - TG_SCAN_HOURS=25                   # 回溯25小时
+      - REPO_BASE_URL=${REPO_BASE_URL}
+      - REPO_NAME=${REPO_NAME:-Private IPA Repo}
+      - REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}
+      - TG_PROXY=${TG_PROXY:-}
+      - "TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}"
+      - TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}
+      - TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}
+      - TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}
+      - TZ=${TZ:-Asia/Shanghai}
 ```
 
 ## ⚙️ 环境变量
@@ -69,6 +74,14 @@ services:
 | `TG_PROXY` | TG 代理（socks5://host:port） | 空（直连） |
 | `TG_SCAN_CRON` | TG 扫描 cron 表达式 | `0 1 * * *` |
 | `TG_SCAN_HOURS` | 回溯小时数 | `25` |
+| `TG_DOWNLOAD_TIMEOUT` | 单个 IPA 下载超时秒数 | `3600` |
+| `TG_MAX_CONCURRENT` | 同时下载数 | `1` |
+| `TZ` | 容器时区 | `Asia/Shanghai` |
+| `IPAES_TAG` | 镜像标签，可固定稳定版 | `latest` |
+| `HOST_PORT_NGINX` | 订阅源宿主端口 | `8080` |
+| `HOST_PORT_WEBUI` | WebUI 宿主端口 | `8085` |
+| `IPA_DIR` | IPA 宿主目录 | `./data/ipa` |
+| `ICONS_DIR` | 图标宿主目录 | `./data/icons` |
 
 ## 📁 配置文件
 
@@ -124,7 +137,7 @@ tail -f logs/tg-cron.log
 公网用户/iPhone Esign 订阅
        ↓ HTTPS
    [反向代理 nginx/Lucky/Traefik]
-       ↓ HTTP :8084
+       ↓ HTTP :8080
 ┌──────────────────────────────┐
 │ 容器 ipaes           │
 │ ├─ nginx (对外服务)          │
