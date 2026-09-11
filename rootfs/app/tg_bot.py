@@ -273,10 +273,30 @@ def compact_text(value, limit=76):
         return text
     return text[: max(0, limit - 1)].rstrip() + "…"
 
+def dedupe_notification_items(downloaded):
+    """通知按软件+版本折叠；不改变实际入库数量或文件。"""
+    unique = []
+    seen = set()
+    for item in downloaded:
+        app = str(item.get("app") or "").strip().casefold()
+        filename = str(item.get("filename") or "").strip()
+        version = version_label(filename)
+        if app and version != "新版本":
+            key = ("app-version", app, version.casefold())
+        else:
+            ver_key = str(item.get("ver_key") or "").strip().casefold()
+            key = ("ver-key", ver_key) if ver_key else ("file", filename.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
+
 def build_notification_text(
     downloaded, total_ipa, total_dl, total_skipped, errors_count,
     groups_count=0, total_msgs=0,
 ):
+    notification_items = dedupe_notification_items(downloaded)
     scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     status = "🚀 有新包入库" if total_dl else "🟢 仓库已是最新"
     lines = [
@@ -288,14 +308,14 @@ def build_notification_text(
         f"结果：发现 {total_ipa} 个 IPA / 入库 {total_dl} 个 / 跳过 {total_skipped} 个 / 异常 {errors_count} 个",
     ]
 
-    if downloaded:
+    if notification_items:
         lines.extend(["", "🎁 新鲜上架"])
-        for idx, item in enumerate(downloaded[:8], start=1):
+        for idx, item in enumerate(notification_items[:8], start=1):
             lines.append(
                 f"{idx}. {compact_text(item['app'], 24)} · {version_label(item['filename'])} · {item['size_mb']} MB"
             )
-        if len(downloaded) > 8:
-            lines.append(f"   ...还有 {len(downloaded) - 8} 个新包，详情看 tg-cron.log")
+        if len(notification_items) > 8:
+            lines.append(f"   ...还有 {len(notification_items) - 8} 个新包，详情看 tg-cron.log")
     else:
         lines.extend([
             "",
