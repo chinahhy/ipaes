@@ -27,6 +27,17 @@ def _load_notification_builder():
 
 
 class TgBotNotificationTests(unittest.TestCase):
+    def test_empty_window_does_not_claim_whitelisted_versions_are_stored(self):
+        build_notification_text = _load_notification_builder()
+        text = build_notification_text([], 0, 0, 0, 0, groups_count=1, total_msgs=20)
+        self.assertIn("没有发现 .ipa 附件", text)
+        self.assertNotIn("已在库", text)
+
+    def test_unmatched_attachments_are_reported_as_whitelist_misses(self):
+        build_notification_text = _load_notification_builder()
+        text = build_notification_text([], 2, 0, 2, 0, matched_count=0)
+        self.assertIn("没有命中白名单", text)
+
     def test_different_versions_are_each_listed_without_cron_footer(self):
         build_notification_text = _load_notification_builder()
         downloaded = [

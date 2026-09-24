@@ -40,7 +40,12 @@ def _best_match_in(segment: str, whitelist: list, source_rank: int):
     best = None
     for app_idx, app in enumerate(whitelist or []):
         for term in _terms_for(app):
-            pos = haystack.find(term.casefold())
+            folded = term.casefold()
+            if len(folded) == 1 and folded.isascii() and folded.isalnum():
+                found = re.search(rf"(?<![a-z0-9]){re.escape(folded)}(?![a-z0-9])", haystack)
+                pos = found.start() if found else -1
+            else:
+                pos = haystack.find(folded)
             if pos < 0:
                 continue
             # Lower is better. Prefer: filename prefix > full filename > caption,

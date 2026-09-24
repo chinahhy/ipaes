@@ -10,13 +10,14 @@ IPA仓库自动扫描器（AltStore/Esign兼容格式）
   REPO_PATH      - URL路径部分（默认从BASE_URL提取）
 """
 
-import os, sys, json, zipfile, plistlib, shutil, struct, zlib, io, binascii
+import os, sys, json, zipfile, plistlib, shutil, struct, zlib, io, binascii, fcntl, tempfile
 from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse, quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
+from ipa_retention import archive_ipa, select_versions
 
 # 客户端解锁码（Esign / 全能签 UI 锁）：
 # - apps[].isNeedlock=1 → 客户端默认显示“解锁”按钮，点击后弹解锁码输入框
@@ -70,8 +71,27 @@ IPA_DIR = DATA_DIR / "ipa"
 ICONS_DIR = DATA_DIR / "icons"
 REPO_JSON = DATA_DIR / "repo.json"
 CACHE_DB = DATA_DIR / ".scan_cache.json"
+SCAN_LOCK = DATA_DIR / ".scanner.lock"
 ICON_EXTRACTOR_VERSION = "cgbi-v3-flutter-deep"
 # ================
+
+def atomic_write_json(path: Path, value: dict):
+    """Publish complete JSON in one rename so readers never see a partial file."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", delete=False,
+        ) as output:
+            temporary = Path(output.name)
+            json.dump(value, output, indent=2, ensure_ascii=False)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 def load_cache():
     if CACHE_DB.exists():
@@ -80,7 +100,7 @@ def load_cache():
     return {}
 
 def save_cache(cache):
-    CACHE_DB.write_text(json.dumps(cache, indent=2, ensure_ascii=False))
+    atomic_write_json(CACHE_DB, cache)
 
 def file_signature(path: Path) -> str:
     st = path.stat()
@@ -552,7 +572,7 @@ def _safe_mkdir(p: Path):
         return
     p.mkdir(parents=True, exist_ok=True)
 
-def scan():
+def _scan_unlocked():
     print(f"🔍 扫描目录: {IPA_DIR}")
     _safe_mkdir(IPA_DIR)
     _safe_mkdir(ICONS_DIR)
@@ -599,6 +619,9 @@ def scan():
             new_cache[ipa.name]["meta"] = meta
         apps.append(meta)
 
+    active, older = select_versions(apps)
+    apps = active
+
     def ver_cmp(v):
         try: return tuple(int(x) for x in v.split("."))
         except: return (0,)
@@ -633,7 +656,7 @@ def scan():
         "unlockURL": f"{BASE_URL}/auth",
         "apps": final_apps,
     }
-    REPO_JSON.write_text(json.dumps(repo, indent=2, ensure_ascii=False))
+    atomic_write_json(REPO_JSON, repo)
 
     # AltStore / Sideloadly 兼容副本：供需要 AltStore 协议的客户端单独订阅
     altstore_repo = {
@@ -642,12 +665,20 @@ def scan():
         "iconURL": f"{BASE_URL}/icons/_repo.png",
         "apps": final_apps,
     }
-    try:
-        (REPO_JSON.parent / "_altstore.json").write_text(
-            json.dumps(altstore_repo, indent=2, ensure_ascii=False)
-        )
-    except Exception as e:
-        print(f"⚠️ 写 _altstore.json 失败: {e}")
+    atomic_write_json(REPO_JSON.parent / "_altstore.json", altstore_repo)
+
+    # 两份订阅源都已发布并确认可解析，才移动旧 IPA。任一写入失败时
+    # 保持所有 IPA 原位，避免旧订阅中的下载链接突然失效。
+    for meta in older:
+        filename = meta["ipa_filename"]
+        try:
+            destination = archive_ipa(IPA_DIR, filename)
+        except OSError as exc:
+            print(f"  ⚠️ 归档失败，继续保留原文件: {filename} ({exc})")
+            apps.append(meta)
+        else:
+            new_cache.pop(filename, None)
+            print(f"  📦 归档旧版本: {filename} → {destination}")
     save_cache(new_cache)
 
     # 清理孤立图标：删掉那些不对应任何已知 IPA 的图标
@@ -662,14 +693,26 @@ def scan():
             print(f"  🗑️ 清理孤立图标: {icon.name}")
             icon.unlink()
 
-    # 同步描述库：删除已经不存在的 IPA 对应的 highlight 记录
+    # 归档仍是可恢复文件；保留其描述，避免恢复后丢失 TG 版本说明。
     try:
-        ipa_desc.prune({m.name for m in IPA_DIR.glob("*.ipa")})
+        known_ipa_names = {m.name for m in IPA_DIR.glob("*.ipa")}
+        known_ipa_names.update(m.name for m in (IPA_DIR / ".archive").glob("*.ipa"))
+        ipa_desc.prune(known_ipa_names)
     except Exception as _e:
         print(f"⚠️ 同步描述库失败: {_e}")
 
     print(f"\n✅ 完成！合并后 {len(final_apps)} 个app（IPA文件{len(apps)}个）")
     return len(apps)
+
+
+def scan():
+    _safe_mkdir(DATA_DIR)
+    with SCAN_LOCK.open("a+") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            return _scan_unlocked()
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 if __name__ == "__main__":
     scan()

@@ -294,11 +294,13 @@ def dedupe_notification_items(downloaded):
 
 def build_notification_text(
     downloaded, total_ipa, total_dl, total_skipped, errors_count,
-    groups_count=0, total_msgs=0,
+    groups_count=0, total_msgs=0, matched_count=0, already_present=0,
 ):
     notification_items = dedupe_notification_items(downloaded)
     scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    status = "🚀 有新包入库" if total_dl else "🟢 仓库已是最新"
+    status = "🚀 有新包入库" if total_dl else (
+        "⚠️ 扫描存在异常" if errors_count else "🟢 本轮无新包"
+    )
     lines = [
         "📦 IPAes 扫描报告",
         f"🕐 {scan_time}",
@@ -317,11 +319,17 @@ def build_notification_text(
         if len(notification_items) > 8:
             lines.append(f"   ...还有 {len(notification_items) - 8} 个新包，详情看 tg-cron.log")
     else:
-        lines.extend([
-            "",
-            "🧊 本轮没有新包",
-            "白名单命中的版本都已经在库里；这次只是例行巡检。"
-        ])
+        if errors_count:
+            reason = "扫描有异常，无法确认群内是否有新包；请查看扫描日志。"
+        elif total_ipa == 0:
+            reason = "本轮回溯窗口内没有发现 .ipa 附件；群里更早的文件不在本次扫描范围内。"
+        elif matched_count == 0:
+            reason = "发现了 IPA 附件，但没有命中白名单；请核对文件名和白名单关键词。"
+        elif already_present == matched_count:
+            reason = "本轮命中的 IPA 文件均已在库。"
+        else:
+            reason = "有命中的 IPA 未入库；请查看扫描日志中的跳过或失败原因。"
+        lines.extend(["", "🧊 本轮没有新包", reason])
 
     if errors_count:
         lines.extend([
@@ -354,6 +362,8 @@ async def send_scan_notification(config, all_results, total_ipa, total_dl, total
     text = build_notification_text(
         downloaded, total_ipa, total_dl, total_skipped, errors_count,
         groups_count=len(all_results), total_msgs=total_msgs,
+        matched_count=sum(r.get("matched", 0) for r in all_results),
+        already_present=sum(r.get("already_present", 0) for r in all_results),
     )
     write_notification_snapshot(NOTIFICATION_SNAPSHOT_PATH, text)
     for chat_id in bot["chat_ids"]:
@@ -450,7 +460,7 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
     """扫描群组，收集待下载 IPA 列表（不下载，下载由 main 统一并发执行）。"""
     result = {"group": group_link, "total_msgs": 0, "ipa_found": 0,
               "downloaded": [], "skipped": 0, "errors": [], "version_keys": set(),
-              "pending": []}
+              "pending": [], "matched": 0, "already_present": 0}
 
     try:
         entity = await client.get_entity(group_link)
@@ -501,6 +511,7 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
         if not app_name:
             log.info(f"  跳过（不在白名单）: {filename}")
             result["skipped"] += 1; continue
+        result["matched"] += 1
 
         size = message.document.size
         unique_key = f"{safe_filename(filename)}_{size}"
@@ -516,14 +527,28 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
                 if unique_key not in state["downloaded_files"]:
                     state["downloaded_files"].append(unique_key)
                 result["version_keys"].add(ver_key)
+                result["already_present"] += 1
                 continue
             log.warning(f"  删除残缺文件后重下: {filename} ({reason})")
             try:
                 save_path.unlink()
             except OSError:
                 pass
-        elif unique_key in downloaded_set:
-            log.warning(f"  状态已记录但本地无完整文件，重新下载: {filename}")
+        else:
+            archive_dir = DOWNLOAD_DIR / ".archive"
+            archived_candidates = [archive_dir / save_path.name]
+            if archive_dir.exists():
+                archived_candidates.extend(archive_dir.glob(f"{save_path.stem}__*.ipa"))
+            archived = next(
+                (p for p in archived_candidates if p.is_file() and p.stat().st_size == size),
+                None,
+            )
+            if archived:
+                log.info(f"  跳过（旧版本已归档）: {filename}")
+                result["skipped"] += 1
+                continue
+            if unique_key in downloaded_set:
+                log.warning(f"  状态已记录但本地无完整文件，重新下载: {filename}")
 
         if not is_priority and ver_key in priority_versions:
             log.info(f"  跳过（优先群已有同版本）: {filename}")
@@ -549,6 +574,11 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
         })
         log.info(f"  待下载: [{app_name}] {filename} ({size/1024/1024:.1f}MB)")
 
+    log.info(
+        "群扫描结果 [%s]: 消息%d条，IPA附件%d个，白名单命中%d个，已有完整文件%d个，待下载%d个，跳过%d个",
+        group_title, result["total_msgs"], result["ipa_found"], result["matched"],
+        result["already_present"], len(result["pending"]), result["skipped"],
+    )
     return result
 
 
@@ -668,10 +698,9 @@ async def main():
         for g in groups:
             if g not in sorted_groups: sorted_groups.append(g)
 
+        # 只使用本轮优先群的实际文件/待下载项。历史 state 可能指向已删除
+        # 的文件，不能据此跳过非优先群当前仍可下载的同版本 IPA。
         priority_versions = set()
-        if "downloaded_versions" in state:
-            for vk in state["downloaded_versions"].keys():
-                priority_versions.add(vk)
 
         # ---- 扫描阶段：遍历所有群，收集待下载列表 ----
         all_results = []
@@ -684,6 +713,8 @@ async def main():
                 if group in priority_groups:
                     for vk in result.get("version_keys", set()):
                         priority_versions.add(vk)
+                    for item in result.get("pending", []):
+                        priority_versions.add(item["ver_key"])
                 for vk in result.get("version_keys", set()):
                     state.setdefault("downloaded_versions", {})[vk] = group
                 save_state(state)

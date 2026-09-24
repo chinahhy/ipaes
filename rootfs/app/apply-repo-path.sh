@@ -79,6 +79,7 @@ if [ -z "$REPO_PATH" ]; then
     SUB_LOCATION='location = / {'
     SUB_BODY='default_type application/json; root /data; rewrite ^ /repo.json break;'
     IPA_LOCATION='location ^~ /ipa/ {'
+    ARCHIVE_LOCATION='location ^~ /ipa/.archive/ {'
     ICONS_LOCATION='location ^~ /icons/ {'
     AUTH_LOCATION='location = /auth {'
     DEFAULT_LOCATION='location / { return 404; }'
@@ -86,6 +87,7 @@ else
     SUB_LOCATION="location = /$REPO_PATH {"
     SUB_BODY='default_type application/json; alias /data/repo.json;'
     IPA_LOCATION="location ^~ /$REPO_PATH/ipa/ {"
+    ARCHIVE_LOCATION="location ^~ /$REPO_PATH/ipa/.archive/ {"
     ICONS_LOCATION="location ^~ /$REPO_PATH/icons/ {"
     AUTH_LOCATION="location = /$REPO_PATH/auth {"
     # 根路径与未匹配路径都返回 404；只声明一条 location /，
@@ -111,6 +113,10 @@ server {
         $SUB_BODY
     }
 
+    $ARCHIVE_LOCATION
+        return 404;
+    }
+
     $IPA_LOCATION
         alias /data/ipa/;
         autoindex off;
@@ -130,6 +136,10 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location ^~ /_ipa_proxy/.archive/ {
+        return 404;
     }
 
     location ^~ /_ipa_proxy/ {

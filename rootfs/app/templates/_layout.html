@@ -2222,11 +2222,12 @@ function ipaApp() {
     },
 
     groupApps() {
-      const map = {};
+      const map = Object.create(null);
       for (const f of this.ipaList) {
         const name = f.app_name || f.filename.replace(/_\d+[\.\d]*_.+\.ipa$/, '');
-        if (!map[name]) {
-          map[name] = {
+        const key = f.bundle_id || name;
+        if (!map[key]) {
+          map[key] = {
             name,
             description: describeApp(name),
             icon: null,
@@ -2235,11 +2236,14 @@ function ipaApp() {
             expanded: false,
           };
         }
-        if (f.icon && !map[name].icon) map[name].icon = f.icon;
-        map[name].versions.push(f);
+        if (f.icon && !map[key].icon) map[key].icon = f.icon;
+        map[key].versions.push(f);
       }
       const arr = Object.values(map);
-      for (const g of arr) g.versions.sort((a, b) => b.mtime - a.mtime);
+      for (const g of arr) g.versions.sort((a, b) =>
+        String(b.version || '').localeCompare(String(a.version || ''), 'en', {numeric:true, sensitivity:'base'})
+        || b.mtime - a.mtime
+      );
       arr.sort((a, b) => (b.versions[0]?.mtime || 0) - (a.versions[0]?.mtime || 0));
       this.appGroups = arr;
     },

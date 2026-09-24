@@ -10,6 +10,8 @@ from flask import Flask, request, jsonify, send_from_directory, Response, abort,
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
+from ipa_matcher import match_whitelist
+from ipa_retention import PROTECTED_FILES
 
 CONFIG_PATH = Path("/config/config.json")
 STATE_PATH = Path("/config/state.json")
@@ -20,9 +22,6 @@ FORWARD_BOT_CONFIG_PATH = Path("/config/forward_bot.json")
 SCAN_SCRIPT = "/app/run-tg-scan.sh"
 SCANNER_SCRIPT = "/app/scanner.py"
 STATIC_DIR = Path(__file__).parent / "webui_static"
-
-# 受保护文件：禁止删除/移除，仅允许下载
-PROTECTED_FILES = {"X_10.76_证书安装登录版本.ipa"}
 
 AUTH_PATH = Path("/config/webui_auth.json")
 RESET_PATH = Path("/config/webui_reset.json")
@@ -348,14 +347,10 @@ def api_list_ipa():
     def _in_whitelist(filename: str, app_name: str) -> bool:
         if not whitelist:
             return True
-        haystack = f"{filename} {app_name}".lower()
-        for app in whitelist:
-            for kw in (app.get("keywords") or []):
-                if str(kw).strip() and str(kw).strip().lower() in haystack:
-                    return True
-            if str(app.get("name") or "").strip().lower() in haystack:
-                return True
-        return False
+        return bool(
+            match_whitelist(filename, "", whitelist)
+            or match_whitelist(f"{app_name}.ipa", "", whitelist)
+        )
 
     files = []
     if IPA_DIR.exists():

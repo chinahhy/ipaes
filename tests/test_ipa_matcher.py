@@ -60,6 +60,14 @@ class IpaMatcherTests(unittest.TestCase):
             "PiliPlus",
         )
 
+    def test_single_letter_app_name_matches_only_a_separate_token(self):
+        whitelist = [{"name": "X", "keywords": ["NeoFreeBird"]}]
+        self.assertEqual(
+            match_whitelist("X_12.28.1_NeoFreeBird.ipa", "#X", whitelist),
+            "X",
+        )
+        self.assertIsNone(match_whitelist("Netflix_1.0.ipa", "", whitelist))
+
 
 if __name__ == "__main__":
     unittest.main()
