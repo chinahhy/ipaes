@@ -106,7 +106,7 @@
         </template>
 
         <div class="app-list" x-show="!loading && filteredApps().length" x-cloak>
-          <template x-for="app in filteredApps()" :key="app.name">
+          <template x-for="app in filteredApps()" :key="app.groupKey">
             <article class="app-row" :class="{expanded:app.expanded}">
               <button type="button" class="app-main" @click="toggleApp(app)">
                 <div class="app-icon" :class="{missing: !appIconSrc(app)}">

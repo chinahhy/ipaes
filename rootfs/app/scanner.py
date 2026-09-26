@@ -70,6 +70,7 @@ DATA_DIR = Path("/data")
 IPA_DIR = DATA_DIR / "ipa"
 ICONS_DIR = DATA_DIR / "icons"
 REPO_JSON = DATA_DIR / "repo.json"
+REPO_ICON_FILENAME = "_repo-v2.png"
 CACHE_DB = DATA_DIR / ".scan_cache.json"
 SCAN_LOCK = DATA_DIR / ".scanner.lock"
 ICON_EXTRACTOR_VERSION = "cgbi-v3-flutter-deep"
@@ -651,7 +652,7 @@ def _scan_unlocked():
         "message": "",
         "identifier": REPO_IDENTIFIER,
         "sourceURL": BASE_URL,
-        "sourceicon": f"{BASE_URL}/icons/_repo.png",
+        "sourceicon": f"{BASE_URL}/icons/{REPO_ICON_FILENAME}",
         "payURL": "",
         "unlockURL": f"{BASE_URL}/auth",
         "apps": final_apps,
@@ -662,7 +663,7 @@ def _scan_unlocked():
     altstore_repo = {
         "name": REPO_NAME,
         "identifier": REPO_IDENTIFIER,
-        "iconURL": f"{BASE_URL}/icons/_repo.png",
+        "iconURL": f"{BASE_URL}/icons/{REPO_ICON_FILENAME}",
         "apps": final_apps,
     }
     atomic_write_json(REPO_JSON.parent / "_altstore.json", altstore_repo)

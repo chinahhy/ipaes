@@ -24,6 +24,7 @@ global rules; write them only when the project genuinely needs to deviate.
 - **图标资产**：`rootfs/app/webui_static/` 下的 `favicon.ico` / `icon-192.png` / `icon-512.png` / `icon-sunpanel.png` / `brand-icon.*` 是项目自有 mascot，禁止替换为受版权保护的第三方品牌素材。
 - **NAS 部署语义**：用户说“本地容器”或“本地 NAS”时，默认指家用 NAS 上的 `ipaes` 容器；SSH 使用本机配置中的 `nas` 别名，不要按当前 Mac 的 Docker 环境处理。
 - **远端部署**：默认 `nas` 的 Docker；任何远端服务重启 / 卷迁移 / 反代变更前先用无害命令探活并征得确认。
+- **镜像发布与部署同步**：今后更新 NAS 生产容器时，同步将对应源码发布到 Docker Hub `hoya0803/ipaes`；优先通过 GitHub Actions 构建 amd64/arm64，核验 `latest` 与不可变 SHA 标签的远端摘要。应急本地镜像部署后，必须补齐同版本发布并核对运行内容，才能报告更新完成。
 
 ## Lifecycle records
 

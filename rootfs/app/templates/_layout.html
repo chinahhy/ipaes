@@ -2228,6 +2228,7 @@ function ipaApp() {
         const key = f.bundle_id || name;
         if (!map[key]) {
           map[key] = {
+            groupKey: key,
             name,
             description: describeApp(name),
             icon: null,

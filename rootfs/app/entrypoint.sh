@@ -69,7 +69,7 @@ echo "🔐 访问 token 已启用（值不输出）"
 
 # === 5. 用统一脚本生成 cron / nginx，REPO_PATH 支持 /config/repo_path.json 热更新 ===
 chmod +x /app/apply-repo-path.sh 2>/dev/null || true
-/app/apply-repo-path.sh
+REPO_BASE_URL_FORCE_ENV=1 /app/apply-repo-path.sh
 # apply-repo-path.sh 会把最终 URL 写入 /tmp/repo_base_url.applied
 if [ -s /tmp/repo_base_url.applied ]; then
     export REPO_BASE_URL="$(cat /tmp/repo_base_url.applied)"
@@ -83,6 +83,12 @@ fi
 
 echo "✅ Nginx server 配置已生成"
 
+# 将镜像内的源图标首次安装到持久化图标卷；已有文件保留，避免覆盖用户自定义内容。
+if [ -f /app/assets/repo-icon-v2.png ] && [ ! -s /data/icons/_repo-v2.png ]; then
+    mkdir -p /data/icons
+    cp /app/assets/repo-icon-v2.png /data/icons/_repo-v2.png
+    chmod 0644 /data/icons/_repo-v2.png
+fi
 
 # === 5. 首次启动扫一次 IPA 源（保证 repo.json 立刻存在）===
 /app/scanner.py 2>&1 | tee -a /logs/scanner.log || echo "首次扫描失败（可能 ipa 目录为空）"

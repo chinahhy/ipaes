@@ -3,7 +3,11 @@
 # 既被 entrypoint.sh 启动时调用，也可以被 WebUI 在用户更换鉴权码后热调用。
 #
 # 输入：
-#   - 环境变量 REPO_BASE_URL（来自 docker-compose .env，固定不变）
+#   - 环境变量 REPO_BASE_URL（来自 docker-compose .env）
+#   - 热更新时优先沿用已生效的 URL，避免常驻 WebUI 进程的旧环境变量
+#     将新域名写回旧域名；显式迁移域名时设置 REPO_BASE_URL_FORCE_ENV=1。
+#   - /config/repo_public_host 若存在，则始终以其中的主机名和端口为准；
+#     容器原地重启时环境变量仍可能是旧值，因此域名迁移要同步更新此文件。
 #   - 可选覆盖文件 /config/repo_path.json 形如 {"code": "abc123"}
 #     若 code 非空，则替换 REPO_BASE_URL 末段为 code。
 #
@@ -14,7 +18,23 @@
 #   4. 触发一次 scanner.py 重新生成 repo.json
 set -e
 
+_APPLIED_FILE="/tmp/repo_base_url.applied"
 RAW_URL="${REPO_BASE_URL:-https://example.com/repo}"
+if [ "${REPO_BASE_URL_FORCE_ENV:-0}" != "1" ] && [ -s "$_APPLIED_FILE" ]; then
+    _CURRENT_URL=$(head -n 1 "$_APPLIED_FILE")
+    case "$_CURRENT_URL" in
+        http://*|https://*) RAW_URL="$_CURRENT_URL" ;;
+    esac
+fi
+_REPO_HOST_FILE="/config/repo_public_host"
+if [ -s "$_REPO_HOST_FILE" ]; then
+    _PUBLIC_HOST=$(head -n 1 "$_REPO_HOST_FILE" | tr -d '\r')
+    if [[ ! "$_PUBLIC_HOST" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
+        echo "invalid repo_public_host" >&2
+        exit 1
+    fi
+    RAW_URL=$(printf '%s' "$RAW_URL" | sed -E "s|^(https?://)[^/]+|\\1${_PUBLIC_HOST}|")
+fi
 _BASE_HOST=$(echo "$RAW_URL" | sed -E 's|(https?://[^/]+).*|\1|')
 REPO_PATH=$(echo "$RAW_URL" | sed -E 's|^https?://[^/]+/?||; s|/$||')
 
@@ -36,7 +56,6 @@ fi
 export REPO_BASE_URL="$FINAL_URL"
 # scanner 会在每次新进程启动时优先读取这个文件。必须先原子更新它，
 # 再 reload nginx / 触发 scanner；否则热更新当次扫描仍可能读取旧路径。
-_APPLIED_FILE="/tmp/repo_base_url.applied"
 _APPLIED_TMP="${_APPLIED_FILE}.$$"
 printf '%s\n' "$FINAL_URL" > "$_APPLIED_TMP"
 mv -f "$_APPLIED_TMP" "$_APPLIED_FILE"
