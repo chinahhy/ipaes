@@ -18,6 +18,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_matcher import display_app_name, filename_app_name, match_whitelist
+from tg_session_lock import SessionBusy, acquire_session_lock
 
 # ===== 配置 =====
 CFG_PATH = Path("/config/forward_bot.json")
@@ -565,8 +566,14 @@ async def handle_tme_link(bot: TGClient, chat_id: int, msg_id: int, channel: str
     """通过 telethon 拉取 t.me/<channel>/<msg_id> 的消息并处理 IPA 附件"""
     await bot.send_message(chat_id, f"🔗 正在拉取频道消息：`@{channel}/{link_msg_id}`")
     try:
+        lease = acquire_session_lock()
+    except SessionBusy as e:
+        await bot.send_message(chat_id, f"⏳ {e}")
+        return
+    try:
         client = await _telethon_client()
     except Exception as e:
+        lease.close()
         log.error(f"telethon 连接失败: {e!r}")
         await bot.send_message(chat_id, f"❌ 无法连接 Telegram：{str(e)[:120]}")
         return
@@ -656,22 +663,24 @@ async def handle_tme_link(bot: TGClient, chat_id: int, msg_id: int, channel: str
             await client.disconnect()
         except Exception:
             pass
+        lease.close()
 
 
 async def _telethon_download_message(channel: str, link_msg_id: int, dest_path: Path):
     """临时连 telethon，下载指定 t.me 消息的附件到 dest_path"""
-    client = await _telethon_client()
-    try:
-        entity = await client.get_entity(channel)
-        msg = await client.get_messages(entity, ids=link_msg_id)
-        if not msg or not getattr(msg, "document", None):
-            raise RuntimeError("消息已不可用或不含附件")
-        await client.download_media(msg, file=str(dest_path))
-    finally:
+    with acquire_session_lock():
+        client = await _telethon_client()
         try:
-            await client.disconnect()
-        except Exception:
-            pass
+            entity = await client.get_entity(channel)
+            msg = await client.get_messages(entity, ids=link_msg_id)
+            if not msg or not getattr(msg, "document", None):
+                raise RuntimeError("消息已不可用或不含附件")
+            await client.download_media(msg, file=str(dest_path))
+        finally:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
 
 
 async def handle_callback(bot: TGClient, cb_id: str, chat_id: int, msg_id: int, data: str):

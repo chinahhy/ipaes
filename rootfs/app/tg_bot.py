@@ -20,6 +20,8 @@ from telethon.tl.types import DocumentAttributeFilename
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_matcher import display_app_name, match_whitelist
+from tg_download import DownloadCancellationFailed, download_media_with_watchdog
+from tg_session_lock import SessionBusy, acquire_session_lock
 
 CONFIG_PATH = Path("/config/config.json")
 FORWARD_BOT_CONFIG_PATH = Path("/config/forward_bot.json")
@@ -110,6 +112,8 @@ PROXY = parse_proxy(PROXY_URL)
 SCAN_HOURS = int(os.environ.get("TG_SCAN_HOURS", "25"))
 SCAN_LIMIT = int(os.environ.get("TG_SCAN_LIMIT", "500"))
 DOWNLOAD_TIMEOUT = int(os.environ.get("TG_DOWNLOAD_TIMEOUT", "1800"))  # 单文件下载超时（秒），默认30分钟
+DOWNLOAD_STALL_TIMEOUT = env_int("TG_DOWNLOAD_STALL_TIMEOUT", 180)
+DOWNLOAD_ATTEMPTS = env_int("TG_DOWNLOAD_ATTEMPTS", 2)
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("TG_MAX_CONCURRENT", "3"))  # 最大并发下载数
 NOTIFY_TIMEOUT = env_int("TG_NOTIFY_TIMEOUT", 30)
 NOTIFY_RETRIES = env_int("TG_NOTIFY_RETRIES", 3)
@@ -607,16 +611,43 @@ async def download_one(client, item, state, semaphore, stop_event):
                 return {"status": "skipped", "item": item}
 
         log.info(f"  下载: [{item['app_name']}] {filename} ({item['size']/1024/1024:.1f}MB)")
-        try:
-            await asyncio.wait_for(
-                client.download_media(item["message"], file=str(part_path)),
-                timeout=DOWNLOAD_TIMEOUT,
-            )
-            ok, reason = validate_ipa(part_path, item["size"])
-            if not ok:
-                raise RuntimeError(reason)
-            part_path.replace(save_path)
+        for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+            try:
+                await download_media_with_watchdog(
+                    client, item["message"], part_path,
+                    DOWNLOAD_TIMEOUT, DOWNLOAD_STALL_TIMEOUT,
+                )
+                ok, reason = validate_ipa(part_path, item["size"])
+                if not ok:
+                    raise RuntimeError(reason)
+                part_path.replace(save_path)
+                break
+            except FloodWaitError as e:
+                log.error("  FloodWait! 需等%ds，紧急停机", e.seconds)
+                stop_event.set()
+                raise
+            except PeerFloodError:
+                log.error("  PeerFlood! 账号可能被风控")
+                stop_event.set()
+                raise
+            except DownloadCancellationFailed:
+                stop_event.set()
+                raise
+            except Exception as e:
+                try:
+                    part_path.unlink()
+                except OSError:
+                    pass
+                if attempt >= DOWNLOAD_ATTEMPTS:
+                    log.error("  下载失败（%d/%d）: %s: %s", attempt, DOWNLOAD_ATTEMPTS, filename, e)
+                    return {"status": "error", "item": item, "error": str(e)}
+                log.warning(
+                    "  下载中断（%d/%d）: %s: %s；稍后重试",
+                    attempt, DOWNLOAD_ATTEMPTS, filename, e,
+                )
+                await asyncio.sleep(min(15, 5 * attempt))
 
+        try:
             unique_key = item["unique_key"]
             if unique_key not in state["downloaded_files"]:
                 state["downloaded_files"].append(unique_key)
@@ -633,27 +664,8 @@ async def download_one(client, item, state, semaphore, stop_event):
             log.info(f"  OK: {save_path.name}")
             return {"status": "ok", "item": item}
 
-        except FloodWaitError as e:
-            log.error(f"  FloodWait! 需等{e.seconds}s，紧急停机")
-            stop_event.set()
-            raise
-        except PeerFloodError as e:
-            log.error(f"  PeerFlood! 账号可能被风控")
-            stop_event.set()
-            raise
-        except asyncio.TimeoutError:
-            try:
-                part_path.unlink()
-            except OSError:
-                pass
-            log.error(f"  下载超时（{DOWNLOAD_TIMEOUT}秒）: {filename}")
-            return {"status": "timeout", "item": item}
         except Exception as e:
-            try:
-                part_path.unlink()
-            except OSError:
-                pass
-            log.error(f"  下载失败: {e}")
+            log.error(f"  下载后处理失败: {e}")
             return {"status": "error", "item": item, "error": str(e)}
 
 
@@ -746,8 +758,10 @@ async def main():
                     continue
 
                 if isinstance(dr, Exception):
-                    # FloodWait / PeerFlood（stop_event 已设置）
-                    group_result["errors"].append(f"{item['filename']}: 风控停机")
+                    if isinstance(dr, (FloodWaitError, PeerFloodError)):
+                        group_result["errors"].append(f"{item['filename']}: 风控停机")
+                    else:
+                        group_result["errors"].append(f"{item['filename']}: {dr}")
                 elif isinstance(dr, dict):
                     status = dr["status"]
                     if status == "ok":
@@ -784,5 +798,29 @@ async def main():
         log.info("断开连接，扫描完成")
 
 
+def run_scan():
+    try:
+        lease = acquire_session_lock()
+    except SessionBusy as e:
+        log.warning("跳过重叠扫描: %s", e)
+        return
+
+    with lease:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(main())
+        finally:
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                _, still_pending = loop.run_until_complete(asyncio.wait(pending, timeout=10))
+                if still_pending:
+                    log.warning("Telethon 退出时仍有 %d 个后台任务，关闭事件循环", len(still_pending))
+            loop.close()
+            asyncio.set_event_loop(None)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_scan()

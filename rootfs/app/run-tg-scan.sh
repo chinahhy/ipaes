@@ -37,7 +37,18 @@ fi
 # 跑 TG 扫描：
 # - tg_bot.py 自己把业务摘要写入 $LOG；这里不再把 stdout 再追加回同一个文件，避免重复写。
 # - 第三方库/解释器 stderr 单独进 runtime 日志，避免污染人看的扫描摘要。
-TG_LOG_PATH="$LOG" /usr/bin/python3 /app/tg_bot.py >> "$RUNTIME_LOG" 2>&1 || echo "❌ tg_bot.py 异常退出，细节见 $RUNTIME_LOG" >> "$LOG"
+# 最后一道保险：即使 Telegram 客户端在收尾阶段卡住，也必须在下次
+# 定时扫描前释放进程和 session。业务层的单文件超时仍由 tg_bot.py 控制。
+if TG_LOG_PATH="$LOG" timeout --signal=TERM --kill-after=15s 39600s /usr/bin/python3 /app/tg_bot.py >> "$RUNTIME_LOG" 2>&1; then
+    :
+else
+    status=$?
+    if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+        echo "❌ tg_bot.py 超过 11 小时未退出，已停止；细节见 $RUNTIME_LOG" >> "$LOG"
+    else
+        echo "❌ tg_bot.py 异常退出（状态 $status），细节见 $RUNTIME_LOG" >> "$LOG"
+    fi
+fi
 
 shrink_log_if_needed "$LOG"
 shrink_log_if_needed "$RUNTIME_LOG"

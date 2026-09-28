@@ -20,7 +20,17 @@ class TgCronEnvironmentTests(unittest.TestCase):
             'CRON_TG_MAX_CONCURRENT=$(cron_quote "${TG_MAX_CONCURRENT:-1}")',
             source,
         )
+        self.assertIn(
+            'CRON_TG_DOWNLOAD_STALL_TIMEOUT=$(cron_quote "${TG_DOWNLOAD_STALL_TIMEOUT:-180}")',
+            source,
+        )
+        self.assertIn(
+            'CRON_TG_DOWNLOAD_ATTEMPTS=$(cron_quote "${TG_DOWNLOAD_ATTEMPTS:-2}")',
+            source,
+        )
         self.assertIn('TG_DOWNLOAD_TIMEOUT="$CRON_TG_DOWNLOAD_TIMEOUT"', source)
+        self.assertIn('TG_DOWNLOAD_STALL_TIMEOUT="$CRON_TG_DOWNLOAD_STALL_TIMEOUT"', source)
+        self.assertIn('TG_DOWNLOAD_ATTEMPTS="$CRON_TG_DOWNLOAD_ATTEMPTS"', source)
         self.assertIn('TG_MAX_CONCURRENT="$CRON_TG_MAX_CONCURRENT"', source)
 
     def test_compose_and_env_example_expose_the_same_defaults(self):
@@ -39,6 +49,8 @@ class TgCronEnvironmentTests(unittest.TestCase):
             'TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}',
             'TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}',
             'TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}',
+            'TG_DOWNLOAD_STALL_TIMEOUT=${TG_DOWNLOAD_STALL_TIMEOUT:-180}',
+            'TG_DOWNLOAD_ATTEMPTS=${TG_DOWNLOAD_ATTEMPTS:-2}',
             'TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}',
             'TZ=${TZ:-Asia/Shanghai}',
         }
@@ -52,6 +64,8 @@ class TgCronEnvironmentTests(unittest.TestCase):
             'IPA_DIR=./data/ipa',
             'ICONS_DIR=./data/icons',
             'TG_DOWNLOAD_TIMEOUT=3600',
+            'TG_DOWNLOAD_STALL_TIMEOUT=180',
+            'TG_DOWNLOAD_ATTEMPTS=2',
             'TG_MAX_CONCURRENT=1',
         }
         for expected in env_defaults:
