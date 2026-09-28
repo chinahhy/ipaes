@@ -18,6 +18,7 @@ services:
       - REPO_NAME=${REPO_NAME:-Private IPA Repo}
       - REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}
       - TG_PROXY=${TG_PROXY:-}
+      - TG_PROXY_OVERRIDE=${TG_PROXY_OVERRIDE:-}
       - "TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}"
       - TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}
       - TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}

@@ -32,6 +32,10 @@ class TgCronEnvironmentTests(unittest.TestCase):
         self.assertIn('TG_DOWNLOAD_STALL_TIMEOUT="$CRON_TG_DOWNLOAD_STALL_TIMEOUT"', source)
         self.assertIn('TG_DOWNLOAD_ATTEMPTS="$CRON_TG_DOWNLOAD_ATTEMPTS"', source)
         self.assertIn('TG_MAX_CONCURRENT="$CRON_TG_MAX_CONCURRENT"', source)
+        self.assertIn(
+            'CRON_TG_PROXY_OVERRIDE=$(cron_quote "${TG_PROXY_OVERRIDE:-}")', source,
+        )
+        self.assertIn('TG_PROXY_OVERRIDE="$CRON_TG_PROXY_OVERRIDE"', source)
 
     def test_compose_and_env_example_expose_the_same_defaults(self):
         compose = COMPOSE_FILE.read_text(encoding="utf-8")
@@ -46,6 +50,7 @@ class TgCronEnvironmentTests(unittest.TestCase):
             'REPO_NAME=${REPO_NAME:-Private IPA Repo}',
             'REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}',
             'TG_PROXY=${TG_PROXY:-}',
+            'TG_PROXY_OVERRIDE=${TG_PROXY_OVERRIDE:-}',
             'TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}',
             'TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}',
             'TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}',
@@ -67,6 +72,7 @@ class TgCronEnvironmentTests(unittest.TestCase):
             'TG_DOWNLOAD_STALL_TIMEOUT=180',
             'TG_DOWNLOAD_ATTEMPTS=2',
             'TG_MAX_CONCURRENT=1',
+            'TG_PROXY_OVERRIDE=',
         }
         for expected in env_defaults:
             self.assertIn(expected, env_example)
