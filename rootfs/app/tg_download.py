@@ -1,6 +1,10 @@
-"""Bounded Telegram media downloads with an inactivity watchdog."""
+"""Resume Telegram files from complete chunks after a slow media DC."""
 
 import asyncio
+from pathlib import Path
+
+
+CHUNK_SIZE = 512 * 1024
 
 
 class DownloadStalled(TimeoutError):
@@ -11,35 +15,55 @@ class DownloadCancellationFailed(RuntimeError):
     pass
 
 
-async def download_media_with_watchdog(client, message, path, timeout, stall_timeout):
+async def download_media_resumable(client, message, path: Path, expected_size,
+                                   timeout, stall_timeout):
+    """Write complete 512 KiB chunks and restart at the last complete chunk."""
+    path = Path(path)
+    current = path.stat().st_size if path.exists() else 0
+    if current > expected_size:
+        with path.open("r+b") as output:
+            output.truncate(0)
+        current = 0
+    elif current < expected_size and current % CHUNK_SIZE:
+        current -= current % CHUNK_SIZE
+        with path.open("r+b") as output:
+            output.truncate(current)
+    if current == expected_size:
+        return current
+
     loop = asyncio.get_running_loop()
-    started = last_progress = loop.time()
-    task = None
-    received = 0
-
-    def on_progress(current, _total):
-        nonlocal last_progress, received
-        if current > received:
-            received = current
-            last_progress = loop.time()
-
+    deadline = loop.time() + timeout
+    stream = client.iter_download(
+        message, offset=current, request_size=CHUNK_SIZE,
+        chunk_size=CHUNK_SIZE, file_size=expected_size,
+    )
     try:
-        task = asyncio.create_task(
-            client.download_media(message, file=str(path), progress_callback=on_progress)
-        )
-        while True:
-            now = loop.time()
-            if now - started >= timeout:
-                raise asyncio.TimeoutError(f"总下载时间超过 {timeout} 秒")
-            if now - last_progress >= stall_timeout:
-                raise DownloadStalled(f"连续 {stall_timeout} 秒无下载进度")
-            wait_for = min(5, timeout - (now - started), stall_timeout - (now - last_progress))
-            done, _ = await asyncio.wait({task}, timeout=wait_for)
-            if done:
-                return await task
+        with path.open("r+b" if path.exists() else "wb") as output:
+            output.seek(current)
+            while current < expected_size:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError(f"总下载时间超过 {timeout} 秒")
+                try:
+                    chunk = await asyncio.wait_for(
+                        stream.__anext__(), timeout=min(stall_timeout, remaining),
+                    )
+                except asyncio.TimeoutError as exc:
+                    if deadline - loop.time() <= 0:
+                        raise asyncio.TimeoutError(f"总下载时间超过 {timeout} 秒") from exc
+                    raise DownloadStalled(f"连续 {stall_timeout} 秒无下载进度") from exc
+                except StopAsyncIteration:
+                    raise RuntimeError(f"媒体流提前结束 {current}/{expected_size}")
+                if not chunk or len(chunk) > expected_size - current:
+                    raise RuntimeError(f"媒体块大小异常 {len(chunk)}/{expected_size - current}")
+                output.write(chunk)
+                output.flush()
+                current += len(chunk)
+        return current
     finally:
-        if task is not None and not task.done():
-            task.cancel()
-            done, _ = await asyncio.wait({task}, timeout=10)
-            if not done:
-                raise DownloadCancellationFailed("下载任务取消后仍未退出；停止本轮扫描")
+        cleanup = asyncio.create_task(stream.close())
+        done, _ = await asyncio.wait({cleanup}, timeout=10)
+        if not done:
+            cleanup.cancel()
+            raise DownloadCancellationFailed("媒体连接清理超时；停止本轮扫描")
+        await cleanup

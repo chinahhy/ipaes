@@ -5,8 +5,11 @@ Telegram IPA Scanner - cron 触发，按白名单下载IPA
 
 环境变量:
   TG_PROXY      - socks5://host:port 或 http://host:port，可空（直连）
+  TG_PROXY_OVERRIDE - 仅本次运行强制使用的代理 URL，供故障补扫
   TG_SCAN_HOURS - 回溯小时数（默认25）
   TG_SCAN_LIMIT - 每个群最多读取消息数（默认500）
+  TG_DOWNLOAD_STALL_TIMEOUT - 单个媒体块无响应的超时秒数（默认180）
+  TG_DOWNLOAD_ATTEMPTS - 单文件续传尝试次数（默认2）
 """
 import asyncio, json, logging, os, random, re, sys, zipfile
 from datetime import datetime, timedelta, timezone
@@ -14,13 +17,16 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse, urlunparse
 
 from telethon import TelegramClient
-from telethon.errors import FloodWaitError, PeerFloodError
+from telethon.errors import (
+    FileReferenceExpiredError, FilerefUpgradeNeededError,
+    FloodWaitError, PeerFloodError,
+)
 from telethon.tl.types import DocumentAttributeFilename
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_matcher import display_app_name, match_whitelist
-from tg_download import DownloadCancellationFailed, download_media_with_watchdog
+from tg_download import DownloadCancellationFailed, download_media_resumable
 from tg_session_lock import SessionBusy, acquire_session_lock
 
 CONFIG_PATH = Path("/config/config.json")
@@ -97,6 +103,12 @@ def redact_proxy_url(proxy_url: str):
         return "<invalid proxy url>"
 
 def load_proxy_url():
+    # 手动补扫可单次切换路径，不改 WebUI 共享的 /config/proxy.json。
+    override = os.environ.get("TG_PROXY_OVERRIDE", "").strip()
+    if override:
+        if parse_proxy(override) is None:
+            raise ValueError("TG_PROXY_OVERRIDE 不是有效的代理 URL")
+        return override
     if PROXY_CONFIG_PATH.exists():
         try:
             cfg = json.loads(PROXY_CONFIG_PATH.read_text())
@@ -562,12 +574,6 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
             log.warning(f"  已达今日上限{rate_limit['max_per_day']}")
             break
 
-        if part_path.exists():
-            try:
-                part_path.unlink()
-            except OSError:
-                pass
-
         # 收集到待下载列表，不在这里下载
         result["pending"].append({
             "message": message, "filename": filename, "app_name": app_name,
@@ -613,8 +619,8 @@ async def download_one(client, item, state, semaphore, stop_event):
         log.info(f"  下载: [{item['app_name']}] {filename} ({item['size']/1024/1024:.1f}MB)")
         for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
             try:
-                await download_media_with_watchdog(
-                    client, item["message"], part_path,
+                await download_media_resumable(
+                    client, item["message"], part_path, item["size"],
                     DOWNLOAD_TIMEOUT, DOWNLOAD_STALL_TIMEOUT,
                 )
                 ok, reason = validate_ipa(part_path, item["size"])
@@ -634,18 +640,36 @@ async def download_one(client, item, state, semaphore, stop_event):
                 stop_event.set()
                 raise
             except Exception as e:
-                try:
-                    part_path.unlink()
-                except OSError:
-                    pass
+                if isinstance(e, (FileReferenceExpiredError, FilerefUpgradeNeededError)):
+                    try:
+                        refreshed = await client.get_messages(
+                            item["group_link"], ids=item["message_id"],
+                        )
+                        if not refreshed or refreshed.document.id != item["message"].document.id:
+                            raise RuntimeError("原 Telegram 附件已变更或删除")
+                        item["message"] = refreshed
+                        log.info("  已刷新 Telegram 文件引用: %s", filename)
+                    except Exception as refresh_error:
+                        e = refresh_error
+                current_size = part_path.stat().st_size if part_path.exists() else 0
+                if current_size == item["size"]:
+                    # 完整大小但 ZIP 校验失败时不能从末尾续传。
+                    part_path.unlink(missing_ok=True)
+                    current_size = 0
                 if attempt >= DOWNLOAD_ATTEMPTS:
                     log.error("  下载失败（%d/%d）: %s: %s", attempt, DOWNLOAD_ATTEMPTS, filename, e)
                     return {"status": "error", "item": item, "error": str(e)}
                 log.warning(
-                    "  下载中断（%d/%d）: %s: %s；稍后重试",
-                    attempt, DOWNLOAD_ATTEMPTS, filename, e,
+                    "  下载中断（%d/%d）: %s: %s；保留 %d 字节后续传",
+                    attempt, DOWNLOAD_ATTEMPTS, filename, e, current_size,
                 )
                 await asyncio.sleep(min(15, 5 * attempt))
+                if MAX_CONCURRENT_DOWNLOADS == 1:
+                    try:
+                        await asyncio.wait_for(client.disconnect(), timeout=15)
+                        await asyncio.wait_for(client.connect(), timeout=25)
+                    except Exception as reset_error:
+                        log.warning("  重建 Telegram 连接失败: %s", reset_error)
 
         try:
             unique_key = item["unique_key"]
