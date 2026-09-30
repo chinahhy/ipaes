@@ -1767,6 +1767,9 @@
   }
   .app-browser .app-row {
     width:100%;
+    /* Keep each row at its content height; the list scrolls when it fills up. */
+    flex:0 0 auto;
+    min-height:74px;
     display:grid;
     grid-template-columns:48px minmax(0,1fr) 18px;
     gap:12px;
