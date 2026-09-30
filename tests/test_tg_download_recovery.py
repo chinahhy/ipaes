@@ -203,6 +203,7 @@ class DownloadWatchdogTests(unittest.IsolatedAsyncioTestCase):
             "MAX_CONCURRENT_DOWNLOADS": 1,
             "download_media_resumable": flaky_download,
             "validate_ipa": lambda path, size: (path.read_bytes() == b"valid", "bad"),
+            "validate_existing_ipa": lambda path, size: (path.read_bytes() == b"valid", "bad"),
             "FloodWaitError": type("FloodWaitError", (Exception,), {}),
             "PeerFloodError": type("PeerFloodError", (Exception,), {}),
             "FileReferenceExpiredError": type("FileReferenceExpiredError", (Exception,), {}),

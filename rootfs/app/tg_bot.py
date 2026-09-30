@@ -472,6 +472,16 @@ def validate_ipa(path: Path, expected_size: int | None = None):
         return False, str(e)
 
 
+def validate_existing_ipa(path, expected_size):
+    # A later post may reuse a filename for a different signed or modified IPA.
+    # Validate local completeness independently of that remote document's size.
+    valid, reason = validate_ipa(path)
+    if valid and path.stat().st_size != expected_size:
+        log.warning("  上游同名附件大小已变化，保留本地完整 IPA: %s (%d/%d)",
+                    path.name, path.stat().st_size, expected_size)
+    return valid, reason
+
+
 async def scan_group(client, group_link, hours_back, whitelist, state,
                      rate_limit, priority_versions, priority_groups):
     """扫描群组，收集待下载 IPA 列表（不下载，下载由 main 统一并发执行）。"""
@@ -537,7 +547,7 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
         part_path = save_path.with_name(save_path.name + ".part")
 
         if save_path.exists():
-            ok, reason = validate_ipa(save_path, size)
+            ok, reason = validate_existing_ipa(save_path, size)
             if ok:
                 log.info(f"  跳过（本地已有完整文件）: {filename}")
                 downloaded_set.add(unique_key)
@@ -612,7 +622,7 @@ async def download_one(client, item, state, semaphore, stop_event):
 
         # 并发场景下可能另一个任务刚下完同名文件
         if save_path.exists():
-            ok, _ = validate_ipa(save_path, item["size"])
+            ok, _ = validate_existing_ipa(save_path, item["size"])
             if ok:
                 log.info(f"  跳过（已被并发任务下载）: {filename}")
                 return {"status": "skipped", "item": item}
