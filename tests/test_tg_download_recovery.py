@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +40,71 @@ class HangingClient:
 
 
 class DownloadWatchdogTests(unittest.IsolatedAsyncioTestCase):
+    async def test_premium_download_wait_retries_same_chunk(self):
+        class PremiumWaitError(Exception):
+            code = 420
+            message = "FLOOD_PREMIUM_WAIT_8"
+
+        class Stream:
+            def __init__(self):
+                self.calls = 0
+                self.closed = False
+
+            async def __anext__(self):
+                self.calls += 1
+                if self.calls == 1:
+                    raise PremiumWaitError()
+                return b"a" * CHUNK_SIZE
+
+            async def close(self):
+                self.closed = True
+
+        stream = Stream()
+
+        class Client:
+            def iter_download(self, _message, **_kwargs):
+                return stream
+
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            path = Path(directory) / "premium.part"
+            with patch("tg_download.asyncio.sleep", new=AsyncMock()) as sleep:
+                result = await download_media_resumable(
+                    Client(), object(), path, CHUNK_SIZE, 30, 1,
+                )
+            self.assertEqual(result, CHUNK_SIZE)
+            self.assertEqual(path.stat().st_size, CHUNK_SIZE)
+        sleep.assert_awaited_once_with(8)
+        self.assertEqual(stream.calls, 2)
+        self.assertTrue(stream.closed)
+
+    async def test_uninitialized_telethon_stream_preserves_original_error(self):
+        class TelethonStream:
+            __module__ = "telethon.client.downloads"
+
+            def __init__(self):
+                self.close_called = False
+
+            async def __anext__(self):
+                raise ConnectionError("media DC connection failed")
+
+            async def close(self):
+                self.close_called = True
+                raise AttributeError("'_DirectDownloadIter' object has no attribute '_sender'")
+
+        stream = TelethonStream()
+
+        class Client:
+            def iter_download(self, _message, **_kwargs):
+                return stream
+
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            with self.assertRaisesRegex(ConnectionError, "media DC connection failed"):
+                await download_media_resumable(
+                    Client(), object(), Path(directory) / "init.part",
+                    CHUNK_SIZE, 1, 0.05,
+                )
+        self.assertFalse(stream.close_called)
+
     async def test_stalled_download_is_cancelled(self):
         client = HangingClient()
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:

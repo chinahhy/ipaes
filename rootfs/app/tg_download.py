@@ -1,6 +1,7 @@
 """Resume Telegram files from complete chunks after a slow media DC."""
 
 import asyncio
+import re
 from pathlib import Path
 
 
@@ -13,6 +14,14 @@ class DownloadStalled(TimeoutError):
 
 class DownloadCancellationFailed(RuntimeError):
     pass
+
+
+def premium_wait_seconds(error):
+    """Telethon 1.36 does not recognize Telegram's download throttle."""
+    if getattr(error, "code", None) != 420:
+        return None
+    match = re.fullmatch(r"FLOOD_PREMIUM_WAIT_(\d+)", str(getattr(error, "message", "")))
+    return max(1, int(match.group(1))) if match else None
 
 
 async def download_media_resumable(client, message, path: Path, expected_size,
@@ -54,6 +63,14 @@ async def download_media_resumable(client, message, path: Path, expected_size,
                     raise DownloadStalled(f"连续 {stall_timeout} 秒无下载进度") from exc
                 except StopAsyncIteration:
                     raise RuntimeError(f"媒体流提前结束 {current}/{expected_size}")
+                except Exception as exc:
+                    wait_seconds = premium_wait_seconds(exc)
+                    if wait_seconds is None:
+                        raise
+                    if wait_seconds >= deadline - loop.time():
+                        raise asyncio.TimeoutError(f"总下载时间超过 {timeout} 秒") from exc
+                    await asyncio.sleep(wait_seconds)
+                    continue
                 if not chunk or len(chunk) > expected_size - current:
                     raise RuntimeError(f"媒体块大小异常 {len(chunk)}/{expected_size - current}")
                 output.write(chunk)
@@ -61,9 +78,14 @@ async def download_media_resumable(client, message, path: Path, expected_size,
                 current += len(chunk)
         return current
     finally:
-        cleanup = asyncio.create_task(stream.close())
-        done, _ = await asyncio.wait({cleanup}, timeout=10)
-        if not done:
-            cleanup.cancel()
-            raise DownloadCancellationFailed("媒体连接清理超时；停止本轮扫描")
-        await cleanup
+        # Telethon 1.36 initializes _sender inside the first __anext__ call.
+        # If that initialization fails, its close() raises AttributeError and
+        # hides the actual media-DC error. No sender exists to release yet.
+        if not (type(stream).__module__.startswith("telethon.") and
+                not hasattr(stream, "_sender")):
+            cleanup = asyncio.create_task(stream.close())
+            done, _ = await asyncio.wait({cleanup}, timeout=10)
+            if not done:
+                cleanup.cancel()
+                raise DownloadCancellationFailed("媒体连接清理超时；停止本轮扫描")
+            await cleanup
