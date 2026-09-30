@@ -15,13 +15,13 @@ import scanner
 
 
 class ScannerRetentionIntegrationTests(unittest.TestCase):
-    def test_scan_archives_fourth_version_and_keeps_repo_url_on_latest(self):
+    def test_scan_archives_sixth_version_and_keeps_repo_url_on_latest(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as temp:
             data = Path(temp)
             ipa_dir = data / "ipa"
             ipa_dir.mkdir()
             cache = {}
-            for number in range(1, 5):
+            for number in range(1, 7):
                 filename = f"Example_{number}.0.ipa"
                 path = ipa_dir / filename
                 with path.open("wb") as output:
@@ -56,20 +56,20 @@ class ScannerRetentionIntegrationTests(unittest.TestCase):
                 scanner.scan()
                 scanner.scan()
 
-            self.assertEqual(len(list(ipa_dir.glob("*.ipa"))), 3)
+            self.assertEqual(len(list(ipa_dir.glob("*.ipa"))), 5)
             self.assertTrue((ipa_dir / ".archive" / "Example_1.0.ipa").exists())
-            self.assertEqual(len(json.loads(cache_path.read_text())), 3)
+            self.assertEqual(len(json.loads(cache_path.read_text())), 5)
             repo = json.loads((data / "repo.json").read_text())
             self.assertEqual(len(repo["apps"]), 1)
-            self.assertEqual(repo["apps"][0]["version"], "4.0")
-            self.assertIn("Example_4.0.ipa", repo["apps"][0]["downloadURL"])
+            self.assertEqual(repo["apps"][0]["version"], "6.0")
+            self.assertIn("Example_6.0.ipa", repo["apps"][0]["downloadURL"])
 
     def test_repo_write_failure_leaves_all_ipa_files_in_place(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as temp:
             data = Path(temp)
             ipa_dir = data / "ipa"
             ipa_dir.mkdir()
-            for number in range(1, 5):
+            for number in range(1, 7):
                 filename = f"Example_{number}.0.ipa"
                 path = ipa_dir / filename
                 with path.open("wb") as output:
@@ -92,7 +92,7 @@ class ScannerRetentionIntegrationTests(unittest.TestCase):
             }), mock.patch.object(scanner, "atomic_write_json", side_effect=OSError("disk full")):
                 with self.assertRaises(OSError):
                     scanner.scan()
-            self.assertEqual(len(list(ipa_dir.glob("*.ipa"))), 4)
+            self.assertEqual(len(list(ipa_dir.glob("*.ipa"))), 6)
             self.assertFalse((ipa_dir / ".archive").exists())
 
 

@@ -1750,7 +1750,7 @@
   /* Apps: stable list and a separate version workspace. */
   .app-browser {
     display:grid;
-    grid-template-columns:minmax(280px, 350px) minmax(0, 1fr);
+    grid-template-columns:minmax(280px, 350px) minmax(0, 1100px);
     gap:16px;
     align-items:start;
   }
@@ -1861,7 +1861,9 @@
   .app-detail-section span { color:var(--muted); font-size:12px }
   .app-detail .version-list {
     display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(min(100%, 260px), 1fr));
     gap:9px;
+    align-items:start;
     max-height:none;
     opacity:1;
     overflow:visible;
@@ -1872,12 +1874,14 @@
     transition:none;
   }
   .app-detail .version-row {
+    grid-template-columns:minmax(0,1fr);
     border:1px solid var(--line);
     border-radius:12px;
     padding:14px;
     background:var(--panel-2);
   }
   .app-detail .version-row:first-child { border-top:1px solid var(--line) }
+  .app-detail .version-actions { justify-content:flex-end }
   .app-detail .version-row.invalid { border-color:var(--danger); background:var(--danger-soft) }
   .app-detail-backdrop { display:none }
   @media (max-width:1100px) {
@@ -1917,6 +1921,7 @@
       opacity:1;
     }
     .app-detail .detail-close { display:inline-grid; flex:none }
+    .app-detail .version-list { grid-template-columns:minmax(0,1fr) }
   }
   @media (max-width:540px) {
     .app-detail { width:100%; border-radius:0 }

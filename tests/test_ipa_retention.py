@@ -20,13 +20,13 @@ def meta(bundle, version, filename=None, mtime=1):
 
 
 class IpaRetentionTests(unittest.TestCase):
-    def test_keeps_three_distinct_latest_versions_per_bundle(self):
-        files = [meta("app.a", v) for v in ("1.0", "4.0", "2.0", "3.0")]
+    def test_keeps_five_distinct_latest_versions_per_bundle(self):
+        files = [meta("app.a", v) for v in ("1.0", "4.0", "2.0", "6.0", "3.0", "5.0")]
         files += [meta("app.b", v) for v in ("1.0", "2.0")]
         active, older = select_versions(files)
         self.assertEqual(
             {m["version"] for m in active if m["bundleIdentifier"] == "app.a"},
-            {"2.0", "3.0", "4.0"},
+            {"2.0", "3.0", "4.0", "5.0", "6.0"},
         )
         self.assertEqual([m["version"] for m in older], ["1.0"])
         self.assertEqual(len([m for m in active if m["bundleIdentifier"] == "app.b"]), 2)
@@ -39,11 +39,17 @@ class IpaRetentionTests(unittest.TestCase):
 
     def test_protected_file_remains_active(self):
         protected = meta("app.x", "1.0", "X_10.76_证书安装登录版本.ipa")
-        files = [protected] + [meta("app.x", v) for v in ("2.0", "3.0", "4.0")]
+        files = [protected] + [meta("app.x", v) for v in ("2.0", "3.0", "4.0", "5.0", "6.0")]
         active, older = select_versions(files)
         self.assertIn(protected, active)
-        self.assertEqual(len(active), 3)
+        self.assertEqual(len(active), 5)
         self.assertEqual([m["version"] for m in older], ["2.0"])
+
+    def test_explicit_limit_still_controls_retention(self):
+        files = [meta("app.a", str(v)) for v in range(1, 7)]
+        active, older = select_versions(files, limit=3)
+        self.assertEqual({m["version"] for m in active}, {"4", "5", "6"})
+        self.assertEqual(len(older), 3)
 
     def test_archive_never_overwrites_an_older_archive(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as temp:

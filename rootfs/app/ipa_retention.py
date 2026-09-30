@@ -1,11 +1,11 @@
-"""Keep three distinct installed versions per Bundle ID; archive older IPA files."""
+"""Keep five distinct installed versions per Bundle ID; archive older IPA files."""
 
 import re
 from collections import defaultdict
 from pathlib import Path
 
 
-KEEP_VERSIONS = 3
+KEEP_VERSIONS = 5
 PROTECTED_FILES = {"X_10.76_证书安装登录版本.ipa"}
 
 
