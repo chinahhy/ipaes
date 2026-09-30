@@ -53,34 +53,6 @@
           </div>
         </div>
 
-        <!-- 趋势 + 热力图 -->
-        <div class="charts-row" x-show="!loading && statsOverview().fileCount > 0" x-cloak>
-          <div class="chart-card">
-            <div class="chart-head">
-              <h3>30 天更新趋势</h3>
-              <span class="chart-sub" x-text="'共 ' + trendStats().total + ' 个 IPA 更新'"></span>
-            </div>
-            <div class="chart-svg-wrap" x-html="trendStats().svg"></div>
-            <div class="chart-axis">
-              <span x-text="trendStats().firstLabel"></span>
-              <span x-text="trendStats().midLabel"></span>
-              <span x-text="trendStats().lastLabel"></span>
-            </div>
-          </div>
-
-          <div class="chart-card">
-            <div class="chart-head">
-              <h3>30 天活跃热力图</h3>
-              <span class="chart-sub" x-text="'活跃 ' + heatmapStats().activeDays + ' 天 · ' + heatmapStats().total + ' 个 IPA'"></span>
-            </div>
-            <div class="heatmap">
-              <template x-for="(d, i) in heatmapStats().cells" :key="i">
-                <span class="heat-cell" :data-level="d.level" :title="d.title"></span>
-              </template>
-            </div>
-          </div>
-        </div>
-
         <div class="toolbar">
           <div class="search"><input x-model="appSearch" placeholder="搜索 APP / 文件 / 版本"></div>
           <select x-model="appSort">
@@ -105,30 +77,50 @@
           </div>
         </template>
 
-        <div class="app-list" x-show="!loading && filteredApps().length" x-cloak>
-          <template x-for="app in filteredApps()" :key="app.groupKey">
-            <article class="app-row" :class="{expanded:app.expanded}">
-              <button type="button" class="app-main" @click="toggleApp(app)">
-                <div class="app-icon" :class="{missing: !appIconSrc(app)}">
+        <div class="app-browser" x-show="!loading && filteredApps().length" x-cloak @keydown.escape.window="closeAppDetail()">
+          <div class="app-list" aria-label="APP 列表">
+            <template x-for="app in filteredApps()" :key="app.groupKey">
+              <button type="button" class="app-row" :class="{selected:selectedApp()?.groupKey===app.groupKey}" :aria-current="selectedApp()?.groupKey===app.groupKey ? 'true' : null" @click="toggleApp(app)">
+                <span class="app-icon" :class="{missing: !appIconSrc(app)}">
                   <template x-if="appIconSrc(app)">
                     <img :src="appIconSrc(app)" @error="handleIconError($event, app)" alt="">
                   </template>
-                </div>
-                <div class="app-info">
-                  <h3 x-text="app.name"></h3>
-                  <p class="app-desc" x-text="app.description" x-show="!app.expanded"></p>
-                  <span class="app-meta-line" x-text="appSummary(app)" x-show="!app.expanded"></span>
-                </div>
-                <div class="app-card-meta">
-                  <div class="app-card-meta-left">
-                    <span class="app-time" x-text="app.versions[0]?.mtime_str || '-'"></span>
-                  </div>
-                </div>
-                <span class="chev" :class="{open:app.expanded}">›</span>
+                  <span x-show="!appIconSrc(app)" x-text="app.name.slice(0, 1)" x-cloak></span>
+                </span>
+                <span class="app-info">
+                  <strong x-text="app.name"></strong>
+                  <span class="app-desc" x-text="app.description"></span>
+                  <span class="app-meta-line" x-text="appSummary(app)"></span>
+                </span>
+                <svg class="app-row-arrow" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
               </button>
-              <div class="version-list" :class="{open:app.expanded}">
-                <template x-for="v in app.versions" :key="v.filename">
-                  <div class="version-row" :class="{invalid:v.scan_status==='invalid'}">
+            </template>
+          </div>
+
+          <div class="app-detail-backdrop" x-show="appDetailOpen" x-cloak @click="closeAppDetail()"></div>
+          <aside class="app-detail" :class="{'mobile-open':appDetailOpen}" aria-label="APP 版本详情">
+            <template x-for="app in (selectedApp() ? [selectedApp()] : [])" :key="app.groupKey">
+              <div>
+                <div class="app-detail-head">
+                  <div class="app-icon detail-icon" :class="{missing: !appIconSrc(app)}">
+                    <template x-if="appIconSrc(app)"><img :src="appIconSrc(app)" @error="handleIconError($event, app)" alt=""></template>
+                    <span x-show="!appIconSrc(app)" x-text="app.name.slice(0, 1)" x-cloak></span>
+                  </div>
+                  <div class="app-detail-title">
+                    <h3 x-text="app.name"></h3>
+                    <p x-text="app.description"></p>
+                  </div>
+                  <button type="button" class="btn sm icon detail-close" @click="closeAppDetail()" title="关闭详情" aria-label="关闭详情">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <div class="app-detail-section">
+                  <h4>版本记录</h4>
+                  <span x-text="app.versions.length + ' 个版本'"></span>
+                </div>
+                <div class="version-list">
+                  <template x-for="v in app.versions" :key="v.filename">
+                    <div class="version-row" :class="{invalid:v.scan_status==='invalid'}">
                     <div class="version-info">
                       <div class="version-title">
                         <span class="ver" x-text="versionLabel(v)"></span>
@@ -169,11 +161,40 @@
                         </button>
                       </template>
                     </div>
-                  </div>
-                </template>
+                    </div>
+                  </template>
+                </div>
               </div>
-            </article>
-          </template>
+            </template>
+          </aside>
+        </div>
+
+        <!-- 次级统计放在目录后，让 APP 内容先进入视野。 -->
+        <div class="charts-row apps-charts" x-show="!loading && statsOverview().fileCount > 0" x-cloak>
+          <div class="chart-card">
+            <div class="chart-head">
+              <h3>30 天更新趋势</h3>
+              <span class="chart-sub" x-text="'共 ' + trendStats().total + ' 个 IPA 更新'"></span>
+            </div>
+            <div class="chart-svg-wrap" x-html="trendStats().svg"></div>
+            <div class="chart-axis">
+              <span x-text="trendStats().firstLabel"></span>
+              <span x-text="trendStats().midLabel"></span>
+              <span x-text="trendStats().lastLabel"></span>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-head">
+              <h3>30 天活跃热力图</h3>
+              <span class="chart-sub" x-text="'活跃 ' + heatmapStats().activeDays + ' 天 · ' + heatmapStats().total + ' 个 IPA'"></span>
+            </div>
+            <div class="heatmap">
+              <template x-for="(d, i) in heatmapStats().cells" :key="i">
+                <span class="heat-cell" :data-level="d.level" :title="d.title"></span>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
     </div>
