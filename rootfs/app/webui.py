@@ -7,6 +7,8 @@ from pathlib import Path
 from functools import wraps
 from urllib.parse import urlparse
 from flask import Flask, request, jsonify, send_from_directory, Response, abort, make_response, redirect, render_template
+from urllib.parse import quote
+from ipa_storage import iter_ipas, resolve_ipa
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
@@ -354,7 +356,7 @@ def api_list_ipa():
 
     files = []
     if IPA_DIR.exists():
-        for f in sorted(IPA_DIR.glob("*.ipa")):
+        for f in sorted(iter_ipas(IPA_DIR)):
             st = f.stat()
             m = meta_by_name.get(f.name, {})
             fallback = _filename_meta(f.name)
@@ -407,8 +409,8 @@ def api_del_ipa():
         if fname in PROTECTED_FILES:
             errors.append(f"{fname}: 该文件受保护，禁止删除")
             continue
-        ipa_path = IPA_DIR / fname
-        if not ipa_path.exists():
+        ipa_path = resolve_ipa(IPA_DIR, fname)
+        if ipa_path is None:
             errors.append(f"{fname}: 文件不存在")
             continue
         try:
@@ -437,10 +439,23 @@ def api_del_ipa():
 def webui_download_ipa(filename):
     if "/" in filename or ".." in filename or not filename.endswith(".ipa"):
         abort(400)
-    path = IPA_DIR / filename
-    if not path.exists() or not path.is_file():
+    path = resolve_ipa(IPA_DIR, filename)
+    if path is None:
         abort(404)
-    return send_from_directory(IPA_DIR, filename, as_attachment=True, download_name=filename)
+    return send_from_directory(path.parent, path.name, as_attachment=True, download_name=filename)
+
+@app.route("/_storage_ipa/<path:filename>", methods=["GET"])
+def storage_download_ipa(filename):
+    # Only the local nginx may resolve a public basename to a physical app path.
+    if request.remote_addr not in {"127.0.0.1", "::1"}:
+        abort(404)
+    path = resolve_ipa(IPA_DIR, filename)
+    if path is None:
+        abort(404)
+    response = Response(mimetype="application/octet-stream")
+    response.headers["X-Accel-Redirect"] = "/_stored_ipa/" + quote(path.relative_to(IPA_DIR).as_posix(), safe="/")
+    response.headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + quote(path.name, safe="")
+    return response
 
 # ============ API: 立即扫描 + 日志 ============
 @app.route("/api/scan", methods=["POST"])
@@ -647,7 +662,7 @@ def api_set_ipa_description():
     raw_text = (data.get("raw_text") or "").strip()
     if not filename or "/" in filename or ".." in filename:
         return jsonify({"error": "filename 非法"}), 400
-    if not (IPA_DIR / filename).exists():
+    if resolve_ipa(IPA_DIR, filename) is None:
         return jsonify({"error": "对应 IPA 不存在"}), 404
     if not isinstance(highlights, list):
         return jsonify({"error": "highlights 必须是数组"}), 400
@@ -1344,7 +1359,7 @@ def api_test_bot():
 @require_auth
 def api_status():
     state = load_state()
-    ipa_count = len(list(IPA_DIR.glob("*.ipa"))) if IPA_DIR.exists() else 0
+    ipa_count = len(list(iter_ipas(IPA_DIR))) if IPA_DIR.exists() else 0
     return jsonify({
         "ipa_count": ipa_count,
         "last_scan": state.get("last_scan", "未知"),

@@ -3,6 +3,7 @@
 import re
 from collections import defaultdict
 from pathlib import Path
+from ipa_storage import resolve_ipa
 
 
 KEEP_VERSIONS = 5
@@ -49,8 +50,10 @@ def select_versions(metas, limit=KEEP_VERSIONS):
 
 def archive_ipa(ipa_dir: Path, filename: str) -> Path:
     """Move one inactive IPA within its own volume. Never overwrite an archive."""
-    source = ipa_dir / filename
-    archive_dir = ipa_dir / ".archive"
+    source = resolve_ipa(ipa_dir, filename)
+    if source is None:
+        raise OSError("IPA not found or ambiguous")
+    archive_dir = source.parent / ".archive"
     if source.is_symlink() or not source.is_file():
         raise OSError(f"not a regular IPA file: {source}")
     if archive_dir.is_symlink():

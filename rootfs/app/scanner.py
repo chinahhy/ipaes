@@ -18,6 +18,7 @@ from urllib.parse import urlparse, quote
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_retention import archive_ipa, select_versions
+from ipa_storage import iter_ipas, resolve_ipa, store_ipa
 
 # 客户端解锁码（Esign / 全能签 UI 锁）：
 # - apps[].isNeedlock=1 → 客户端默认显示“解锁”按钮，点击后弹解锁码输入框
@@ -584,7 +585,7 @@ def _scan_unlocked():
 
     import time as _time
     _now = _time.time()
-    _all_ipas = list(IPA_DIR.glob("*.ipa"))
+    _all_ipas = iter_ipas(IPA_DIR)
     _skipped = []
     ipa_files = []
     for _f in sorted(_all_ipas):
@@ -668,6 +669,12 @@ def _scan_unlocked():
     }
     atomic_write_json(REPO_JSON.parent / "_altstore.json", altstore_repo)
 
+    # URLs remain basename based; organize after both indexes publish successfully.
+    for meta in active + older:
+        source = resolve_ipa(IPA_DIR, meta["ipa_filename"])
+        if source is not None:
+            store_ipa(source, IPA_DIR, meta)
+
     # 两份订阅源都已发布并确认可解析，才移动旧 IPA。任一写入失败时
     # 保持所有 IPA 原位，避免旧订阅中的下载链接突然失效。
     for meta in older:
@@ -696,8 +703,8 @@ def _scan_unlocked():
 
     # 归档仍是可恢复文件；保留其描述，避免恢复后丢失 TG 版本说明。
     try:
-        known_ipa_names = {m.name for m in IPA_DIR.glob("*.ipa")}
-        known_ipa_names.update(m.name for m in (IPA_DIR / ".archive").glob("*.ipa"))
+        known_ipa_names = {m.name for m in iter_ipas(IPA_DIR)}
+        known_ipa_names.update(m.name for m in iter_ipas(IPA_DIR, archived=True))
         ipa_desc.prune(known_ipa_names)
     except Exception as _e:
         print(f"⚠️ 同步描述库失败: {_e}")

@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "rootfs" / "app"))
 
 import scanner
+from ipa_storage import iter_ipas
 
 
 class ScannerRetentionIntegrationTests(unittest.TestCase):
@@ -56,8 +57,8 @@ class ScannerRetentionIntegrationTests(unittest.TestCase):
                 scanner.scan()
                 scanner.scan()
 
-            self.assertEqual(len(list(ipa_dir.glob("*.ipa"))), 5)
-            self.assertTrue((ipa_dir / ".archive" / "Example_1.0.ipa").exists())
+            self.assertEqual(len(iter_ipas(ipa_dir)), 5)
+            self.assertTrue((ipa_dir / "Example" / ".archive" / "Example_1.0.ipa").exists())
             self.assertEqual(len(json.loads(cache_path.read_text())), 5)
             repo = json.loads((data / "repo.json").read_text())
             self.assertEqual(len(repo["apps"]), 1)

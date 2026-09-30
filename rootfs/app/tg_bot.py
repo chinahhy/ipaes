@@ -28,6 +28,7 @@ import ipa_descriptions as ipa_desc
 from ipa_matcher import display_app_name, match_whitelist
 from tg_download import DownloadCancellationFailed, download_media_resumable
 from tg_session_lock import SessionBusy, acquire_session_lock
+from ipa_storage import download_path, store_ipa
 
 CONFIG_PATH = Path("/config/config.json")
 FORWARD_BOT_CONFIG_PATH = Path("/config/forward_bot.json")
@@ -532,7 +533,7 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
         size = message.document.size
         unique_key = f"{safe_filename(filename)}_{size}"
         ver_key = extract_version_key(filename)
-        save_path = DOWNLOAD_DIR / safe_filename(filename)
+        save_path = download_path(DOWNLOAD_DIR, safe_filename(filename), app_name)
         part_path = save_path.with_name(save_path.name + ".part")
 
         if save_path.exists():
@@ -551,7 +552,7 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
             except OSError:
                 pass
         else:
-            archive_dir = DOWNLOAD_DIR / ".archive"
+            archive_dir = save_path.parent / ".archive"
             archived_candidates = [archive_dir / save_path.name]
             if archive_dir.exists():
                 archived_candidates.extend(archive_dir.glob(f"{save_path.stem}__*.ipa"))
@@ -672,6 +673,8 @@ async def download_one(client, item, state, semaphore, stop_event):
                         log.warning("  重建 Telegram 连接失败: %s", reset_error)
 
         try:
+            save_path = store_ipa(save_path, DOWNLOAD_DIR)
+            item["save_path"] = save_path
             unique_key = item["unique_key"]
             if unique_key not in state["downloaded_files"]:
                 state["downloaded_files"].append(unique_key)

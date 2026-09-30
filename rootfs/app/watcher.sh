@@ -25,7 +25,7 @@ scan_now() {
 
 # inotify 监听
 (
-    inotifywait -m -e create -e moved_to -e moved_from -e delete -e close_write \
+    inotifywait -m -r -e create -e moved_to -e moved_from -e delete -e close_write \
         --format "%e %f" "$WATCH_DIR" 2>/dev/null | \
     while read event filename; do
         case "$filename" in

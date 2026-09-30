@@ -143,8 +143,13 @@ server {
     }
 
     $IPA_LOCATION
+        rewrite ^/(?:$REPO_PATH/)?ipa/(.*)$ /_storage_ipa/\$1 break;
+        proxy_pass http://127.0.0.1:8085;
+    }
+
+    location ^~ /_stored_ipa/ {
+        internal;
         alias /data/ipa/;
-        autoindex off;
     }
 
     $ICONS_LOCATION
@@ -168,8 +173,8 @@ server {
     }
 
     location ^~ /_ipa_proxy/ {
-        alias /data/ipa/;
-        add_header Content-Disposition "attachment" always;
+        rewrite ^/_ipa_proxy/(.*)$ /_storage_ipa/\$1 break;
+        proxy_pass http://127.0.0.1:8085;
     }
 
     $DEFAULT_LOCATION

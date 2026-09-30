@@ -18,6 +18,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_matcher import display_app_name, filename_app_name, match_whitelist
+from ipa_storage import download_path, iter_ipas, store_ipa
 from tg_session_lock import SessionBusy, acquire_session_lock
 
 # ===== 配置 =====
@@ -149,7 +150,7 @@ def format_time(value: str | None) -> str:
 def latest_ipa_files(limit: int = 5) -> list[Path]:
     if not IPA_DIR.exists():
         return []
-    return sorted(IPA_DIR.glob("*.ipa"), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
+    return sorted(iter_ipas(IPA_DIR), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
 
 def is_scan_running() -> bool:
     for pid in os.listdir("/proc"):
@@ -183,7 +184,7 @@ def build_status_text() -> str:
     lines = [
         "🌸 *IPA 小助手状态*",
         "",
-        f"📦 仓库：*{len(list(IPA_DIR.glob('*.ipa'))) if IPA_DIR.exists() else 0}* 个 IPA",
+        f"📦 仓库：*{len(list(iter_ipas(IPA_DIR))) if IPA_DIR.exists() else 0}* 个 IPA",
         f"🕒 上次扫描：{format_time(state.get('last_scan'))}",
         f"⚙️ 扫描：{'运行中' if is_scan_running() else '空闲'}",
     ]
@@ -245,7 +246,7 @@ def check_warehouse(filename: str) -> dict:
     if not IPA_DIR.exists():
         return result
     new_key = extract_version_key(filename)
-    for f in sorted(IPA_DIR.glob("*.ipa")):
+    for f in sorted(iter_ipas(IPA_DIR)):
         if f.name == filename:
             result["exists"] = True
             result["same_name"] = True
@@ -753,7 +754,7 @@ async def handle_callback(bot: TGClient, cb_id: str, chat_id: int, msg_id: int, 
     deleted = []
     if action == "replace":
         new_key = extract_version_key(filename)
-        for old_f in sorted(IPA_DIR.glob("*.ipa")):
+        for old_f in sorted(iter_ipas(IPA_DIR)):
             if old_f.name == filename:
                 old_f.unlink()
                 deleted.append(old_f.name)
@@ -761,12 +762,13 @@ async def handle_callback(bot: TGClient, cb_id: str, chat_id: int, msg_id: int, 
                 old_f.unlink()
                 deleted.append(old_f.name)
 
-    dest_path = IPA_DIR / filename
+    dest_path = download_path(IPA_DIR, filename, info.get("app_name"))
     if dest_path.exists():
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
         stem = filename.rsplit(".", 1)[0]
-        dest_path = IPA_DIR / f"{stem}_{ts}.ipa"
+        dest_path = dest_path.with_name(f"{stem}_{ts}.ipa")
     shutil.move(str(tmp_path), str(dest_path))
+    dest_path = store_ipa(dest_path, IPA_DIR)
 
     # 记录"破解点 / 版本说明"——在 scanner.py 重建 repo.json 之前写入，
     # 这样这次重建就能拿到最新的 highlights。

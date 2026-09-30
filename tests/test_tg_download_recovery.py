@@ -211,9 +211,11 @@ class DownloadWatchdogTests(unittest.IsolatedAsyncioTestCase):
             "log": logging.getLogger("test-tg-download"),
             "ipa_desc": SimpleNamespace(remember_from_message=lambda *args: None),
             "display_app_name": lambda filename, app: app,
+            "store_ipa": __import__("ipa_storage").store_ipa,
         }
         exec(compile(ast.Module(body=[function], type_ignores=[]), source, "exec"), namespace)
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            namespace["DOWNLOAD_DIR"] = Path(directory)
             save_path = Path(directory) / "sample.ipa"
             item = {
                 "filename": save_path.name, "app_name": "Sample", "size": 5,
@@ -228,7 +230,8 @@ class DownloadWatchdogTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(result["status"], "ok")
             self.assertEqual(len(calls), 2)
-            self.assertEqual(save_path.read_bytes(), b"valid")
+            self.assertEqual(item["save_path"].read_bytes(), b"valid")
+            self.assertEqual(item["save_path"].parent.name, "sample")
             self.assertFalse(item["part_path"].exists())
             self.assertEqual((client.disconnects, client.connects), (1, 1))
 
