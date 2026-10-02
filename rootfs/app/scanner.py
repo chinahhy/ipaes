@@ -74,7 +74,7 @@ REPO_JSON = DATA_DIR / "repo.json"
 REPO_ICON_FILENAME = "_repo-v2.png"
 CACHE_DB = DATA_DIR / ".scan_cache.json"
 SCAN_LOCK = DATA_DIR / ".scanner.lock"
-ICON_EXTRACTOR_VERSION = "cgbi-v3-flutter-deep"
+ICON_EXTRACTOR_VERSION = "cgbi-v4-declared-icon-names"
 # ================
 
 def atomic_write_json(path: Path, value: dict):
@@ -355,6 +355,19 @@ def _normalize_png(path):
             pass
         return False
 
+def _icon_stem(name: str) -> str:
+    """归一化图标名：小写、去 .png 扩展名、去 @2x/@3x 缩放后缀。
+
+    Info.plist 声明的图标名写法不一：既可能是 "icon" 也可能是 "icon.png"
+    或 "Icon@2x.png"。统一归一化后与归档内文件名 stem 比对，避免因扩展名、
+    大小写或缩放后缀不一致而漏掉真正声明的图标（例如 X/Twitter 的
+    CFBundleIconFiles = ["icon.png", "icon@2x.png", "icon@3x.png"]）。
+    """
+    s = name.lower()
+    if s.endswith(".png"):
+        s = s[:-4]
+    return s.rsplit("@", 1)[0]
+
 def extract_largest_icon(zf, app_dir, plist, out_path):
     """Extract best app icon from IPA. All PNGs accepted - CgBI auto-converted."""
     declared_names = set()
@@ -364,6 +377,7 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
         declared_names.add(f)
     for f in plist.get("CFBundleIconFiles", []) or []:
         declared_names.add(f)
+    declared_stems = {_icon_stem(f) for f in declared_names}
 
     app_prefix = f"Payload/{app_dir}/"
     candidates = []
@@ -379,11 +393,12 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
         try: size = zf.getinfo(name).file_size
         except: continue
 
-        if stem_clean in declared_names or stem in declared_names:
+        key = _icon_stem(basename)
+        if key in declared_stems or stem_clean in declared_names or stem in declared_names:
             candidates.append((1, -size, name)); continue
-        if stem_clean.startswith("AppIcon") or stem.startswith("AppIcon"):
+        if key.startswith("appicon"):
             candidates.append((2, -size, name)); continue
-        if stem_clean.startswith("Icon-") or stem_clean.startswith("Icon") or stem_clean == "iTunesArtwork":
+        if key.startswith("icon") or key == "itunesartwork":
             candidates.append((3, -size, name))
 
     # Pass 2: Flutter / framework icons at common deep paths
