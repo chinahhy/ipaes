@@ -19,5 +19,10 @@ __pycache__/
 .vscode/
 .idea/
 
+# 本地运行/测试产生的临时文件（容器内对应文件在 /data 卷）
+.ipa-storage.json
+.ipa-storage.lock
+xcrun_db
+
 # 本地提醒标记（用户在工作目录留的私有文件名提示，不入库）
 请勿分享、提交到公开仓库或截图外传。
