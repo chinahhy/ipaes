@@ -42,7 +42,7 @@ class TgCronEnvironmentTests(unittest.TestCase):
         env_example = ENV_EXAMPLE.read_text(encoding="utf-8")
 
         compose_defaults = {
-            'image: hoya0803/ipaes:${IPAES_TAG:-latest}',
+            'image: hoya0803/ipaes:latest',
             '${HOST_PORT_NGINX:-8080}:80',
             '${HOST_PORT_WEBUI:-8085}:8085',
             '${IPA_DIR:-./data/ipa}:/data/ipa',
@@ -63,7 +63,6 @@ class TgCronEnvironmentTests(unittest.TestCase):
             self.assertIn(expected, compose)
 
         env_defaults = {
-            'IPAES_TAG=latest',
             'HOST_PORT_NGINX=8080',
             'HOST_PORT_WEBUI=8085',
             'IPA_DIR=./data/ipa',
