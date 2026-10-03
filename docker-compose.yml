@@ -1,6 +1,6 @@
 services:
   ipaes:
-    image: hoya0803/ipaes:${IPAES_TAG:-latest}
+    image: hoya0803/ipaes:latest
     container_name: ipaes
     restart: unless-stopped
     ports:

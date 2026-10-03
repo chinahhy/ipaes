@@ -3,7 +3,6 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [main]
-    tags: ['v*']
     # 只在影响镜像的文件改动时构建（compose/README/docs改动不触发）
     paths:
       - 'Dockerfile'
@@ -14,6 +13,7 @@ on:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,12 +56,7 @@ jobs:
         with:
           images: hoya0803/ipaes
           tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -69,7 +64,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: hoya0803/ipaes:latest
           labels: ${{ steps.meta.outputs.labels }}
           # cache-from 不写 ignore-error，让缓存读失败时悄悄绕过；
           # cache-to 加 ignore-error=true：GHA cache 抽风导出失败不再让整个 build 失败。

@@ -39,7 +39,7 @@ docker compose up -d
 ```yaml
 services:
   ipaes:
-    image: hoya0803/ipaes:${IPAES_TAG:-latest}
+    image: hoya0803/ipaes:latest
     container_name: ipaes
     restart: unless-stopped
     ports:
@@ -77,7 +77,6 @@ services:
 | `TG_DOWNLOAD_TIMEOUT` | 单个 IPA 下载超时秒数 | `3600` |
 | `TG_MAX_CONCURRENT` | 同时下载数 | `1` |
 | `TZ` | 容器时区 | `Asia/Shanghai` |
-| `IPAES_TAG` | 镜像标签，可固定稳定版 | `latest` |
 | `HOST_PORT_NGINX` | 订阅源宿主端口 | `8080` |
 | `HOST_PORT_WEBUI` | WebUI 宿主端口 | `8085` |
 | `IPA_DIR` | IPA 宿主目录 | `./data/ipa` |
@@ -150,10 +149,9 @@ tail -f logs/tg-cron.log
 
 | Tag | 说明 |
 |---|---|
-| `latest` | 主分支最新构建（推荐）|
-| `main` | 同 latest |
-| `sha-xxxxxxx` | 特定 commit 的镜像 |
-| `vX.Y.Z` | 语义化版本（如有发布）|
+| `latest` | 主分支最新构建，唯一发布标签 |
+
+不生成分支、版本号、SHA 或其他自定义标签。回退使用镜像摘要或保留的旧镜像 ID。
 
 支持架构：`linux/amd64`、`linux/arm64`
 

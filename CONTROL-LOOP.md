@@ -48,6 +48,7 @@
   - 已发布的订阅 URL 末段（token / unlock 段）不被无脑覆盖（参见 `1428ed6`）
   - 用户卷 `./config ./session ./data` 的语义与权限
   - 单容器单镜像形态，不引入额外服务
+  - 镜像唯一发布与常规部署标签为 `latest`；不创建自定义镜像标签
 - 可被外部观察到的成功判据：
   - `docker compose ps` 健康，`curl -fsS http://127.0.0.1:8080/healthz` 通过
   - WebUI 入口图标显示为本项目 mascot 而非默认浏览器图标
@@ -72,7 +73,7 @@
 - 主要干预手段：编辑 `rootfs/app/*.py`、`rootfs/etc/`、Dockerfile、compose、文档；通过 GHA 推镜像；远端 `docker compose pull && up -d`。
 - 单步上限：单 PR/commit 不混合「行为变更 + 重构 + 依赖升级」三类。
 - 回退策略：
-  - 镜像层：保留上一个稳定 tag，远端可 `image:` 指定回退
+  - 镜像层：记录上一个稳定摘要/镜像 ID 并保留旧镜像，回退按摘要或 ID 指定，不创建自定义标签
   - 配置层：`unlock.json` / `config.json` 改动前读旧值并保底
   - 数据层：永不在容器内主动删 `IPA_DIR`
 

@@ -40,7 +40,6 @@ cp .env.example .env
 | `TG_DOWNLOAD_TIMEOUT` | 否 | 单个 IPA 下载超时秒数（默认 3600） |
 | `TG_MAX_CONCURRENT` | 否 | 同时下载数（默认 1） |
 | `TZ` | 否 | 时区（默认 `Asia/Shanghai`） |
-| `IPAES_TAG` | 否 | 镜像标签（默认 `latest`，可固定为 `v2.4.0`） |
 
 如需自定义宿主机端口或 IPA/图标目录路径：
 
@@ -129,9 +128,6 @@ location / {
 # 升级
 docker compose pull && docker compose up -d
 
-# 固定到本次稳定版
-# 在 .env 中设置 IPAES_TAG=v2.4.0 后重建容器
-
 # 手动触发 TG 扫描
 docker exec ipaes /app/run-tg-scan.sh
 
@@ -143,6 +139,9 @@ docker compose logs -f
 tail -f logs/scanner.log
 tail -f logs/tg-cron.log
 ```
+
+镜像统一使用 `hoya0803/ipaes:latest`，不生成分支、版本号、SHA 或其他自定义标签。
+需要回退时使用已记录的镜像摘要或保留的旧镜像 ID，无需创建回退标签。
 
 ## 📜 License
 
