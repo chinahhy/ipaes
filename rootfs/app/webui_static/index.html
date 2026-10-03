@@ -1761,7 +1761,7 @@
             </div>
           </template>
           <div class="whitelist-grid" x-show="cfg.whitelist && cfg.whitelist.length" x-cloak>
-            <template x-for="app in (cfg.whitelist || [])" :key="app.name">
+            <template x-for="app in (cfg.whitelist || [])" :key="JSON.stringify([app.name, app.keywords])">
               <div class="whitelist-item">
                 <div class="whitelist-top">
                   <div class="grow">
@@ -1773,7 +1773,7 @@
                   </button>
                 </div>
                 <div class="tag-cloud">
-                  <template x-for="(k,i) in app.keywords" :key="k">
+                  <template x-for="(k,i) in app.keywords" :key="JSON.stringify([k,i])">
                     <span class="tag"><span x-text="k"></span><button type="button" @click="delKeyword(app,i)">×</button></span>
                   </template>
                   <input class="inline-add" x-model="newKw[app.name]" placeholder="+ 关键词" @keydown.enter.prevent="addKeyword(app)">
@@ -2495,6 +2495,7 @@ function ipaApp() {
         whitelist: c.whitelist || [],
         rate_limit: c.rate_limit || { max_per_day: 30, min_interval_sec: 30, max_interval_sec: 120 },
       };
+      await this.$nextTick();
     },
 
     async loadStatus() {

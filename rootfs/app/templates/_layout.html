@@ -2492,6 +2492,7 @@ function ipaApp() {
         whitelist: c.whitelist || [],
         rate_limit: c.rate_limit || { max_per_day: 30, min_interval_sec: 30, max_interval_sec: 120 },
       };
+      await this.$nextTick();
     },
 
     async loadStatus() {
