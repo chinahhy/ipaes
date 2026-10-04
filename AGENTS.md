@@ -17,6 +17,7 @@ global rules; write them only when the project genuinely needs to deviate.
 
 ## Project-specific overrides
 
+- **铁律：X 10.76 永久保留，禁止删除**：保护对象固定为 `X_10.76_证书安装登录版本.ipa`（X/Twitter `10.76`，Build `14`，Bundle ID `com.atebits.Tweetie2`），不能随“最老版本”的变化改指其他版本；改名、迁移不解除保护。任何自动清理、版本淘汰、去重、归档清理、重下载或人工维护均不得删除、覆盖损坏或通过删除父目录/卷间接移除它。唯一例外：Hoya 明确要求删除该版本后，必须在同一次删除操作前逐轮取得 **3 次独立、明确的确认（1/3 → 2/3 → 3/3）**；每轮明确文件、实际路径和后果，等上一轮回复后再问下一轮。初始删除要求不计入三次确认；一次答复、历史授权、批量清理授权及沉默不能替代三轮。三轮未完成或中途撤回，不得删除或解除保护；删除范围变化需重新确认。详细约束见 `CONTROL-LOOP.md`。
 - **不要重命名或随意覆盖 `unlock.json` / token 段**：已发布订阅的 URL 末段是用户在 Esign/AltStore 里写死的，必须沿用既有值（参见 commit `1428ed6`）。
 - **修改 `repo.json` schema 视为高风险**：影响所有 AltStore/Esign 订阅客户端，需逐字段对比上线前后的 JSON。
 - **保持单镜像单容器形态**：不要引入新的 service（数据库、独立 worker 等）；新增功能优先合入现有 supervisord 进程组。
