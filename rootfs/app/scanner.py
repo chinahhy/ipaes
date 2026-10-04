@@ -74,7 +74,7 @@ REPO_JSON = DATA_DIR / "repo.json"
 REPO_ICON_FILENAME = "_repo-v2.png"
 CACHE_DB = DATA_DIR / ".scan_cache.json"
 SCAN_LOCK = DATA_DIR / ".scanner.lock"
-ICON_EXTRACTOR_VERSION = "cgbi-v4-declared-icon-names"
+ICON_EXTRACTOR_VERSION = "cgbi-v5-native-icon-priority"
 # ================
 
 def atomic_write_json(path: Path, value: dict):
@@ -371,10 +371,12 @@ def _icon_stem(name: str) -> str:
 def extract_largest_icon(zf, app_dir, plist, out_path):
     """Extract best app icon from IPA. All PNGs accepted - CgBI auto-converted."""
     declared_names = set()
-    icons_dict = plist.get("CFBundleIcons") or {}
-    primary = icons_dict.get("CFBundlePrimaryIcon") or {}
-    for f in primary.get("CFBundleIconFiles", []) or []:
-        declared_names.add(f)
+    # iPhone / iPad 都可能独立声明主图标，不能把 iPad 图标当作弱兜底。
+    for icons_key in ("CFBundleIcons", "CFBundleIcons~ipad"):
+        icons_dict = plist.get(icons_key) or {}
+        primary = icons_dict.get("CFBundlePrimaryIcon") or {}
+        for f in primary.get("CFBundleIconFiles", []) or []:
+            declared_names.add(f)
     for f in plist.get("CFBundleIconFiles", []) or []:
         declared_names.add(f)
     declared_stems = {_icon_stem(f) for f in declared_names}
@@ -452,11 +454,10 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
         # 太小（< 4KB）多半不是合格图标
         if size < 4096:
             continue
-        # 深层 logo/icon ≥ 16KB 时，明显比根级 AppIcon 占位图更合适，
-        # 提到 priority=1（仅次于 CFBundleIconFiles 显式声明）。
-        # < 16KB 但 ≥ 4KB 时只作为兜底（priority=4）。
-        prio = 1 if size >= 16384 else 4
-        candidates.append((prio, -size, name))
+        # 深层素材只作兜底：文件较大不代表它是应用图标。
+        # 芒果TV 的横版 logo_mgtv.png 比声明的方形 AppIcon 更大；
+        # 若与主图标同优先级，会错误地被选中。原生候选无效时才尝试它们。
+        candidates.append((4, -size, name))
         seen_deep.add(name)
 
     # iTunesArtwork (no .png extension) -- highest priority, fallback

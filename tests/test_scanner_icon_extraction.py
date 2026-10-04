@@ -95,6 +95,79 @@ class ExtractLargestIconTests(unittest.TestCase):
         self.assertTrue(ok, "lowercase root icon.png should fall through")
         self.assertEqual(len(content), 128)
 
+    def test_mango_tv_declared_icon_wins_over_larger_flutter_logo(self):
+        plist = {
+            "CFBundleIcons": {
+                "CFBundlePrimaryIcon": {"CFBundleIconFiles": ["AppIcon60x60"]}
+            },
+            "CFBundleIcons~ipad": {
+                "CFBundlePrimaryIcon": {
+                    "CFBundleIconFiles": ["AppIcon60x60", "AppIcon76x76"]
+                }
+            },
+        }
+        ipad_icon = _fake_png(11451)
+        entries = {
+            "AppIcon60x60@2x.png": _fake_png(8480),
+            "AppIcon76x76@2x~ipad.png": ipad_icon,
+            "Frameworks/App.framework/flutter_assets/lib/shanhai/assets/images/logo_mgtv.png": _fake_png(27902),
+        }
+        ok, content = self._run("Mango.app", plist, entries)
+        self.assertTrue(ok)
+        self.assertEqual(content, ipad_icon)
+
+    def test_declared_icon_wins_over_larger_deep_logo(self):
+        icon = _fake_png(8480)
+        entries = {
+            "icon@2x.png": icon,
+            "assets/logo.png": _fake_png(27902),
+        }
+        ok, content = self._run("Demo.app", {"CFBundleIconFiles": ["icon"]}, entries)
+        self.assertTrue(ok)
+        self.assertEqual(content, icon)
+
+    def test_ipad_primary_declaration_wins_over_appicon_fallback(self):
+        icon = _fake_png(128)
+        plist = {"CFBundleIcons~ipad": {
+            "CFBundlePrimaryIcon": {"CFBundleIconFiles": ["TabletPrimary"]}
+        }}
+        entries = {
+            "TabletPrimary@2x~ipad.png": icon,
+            "AppIconOther.png": _fake_png(512),
+        }
+        ok, content = self._run("Demo.app", plist, entries)
+        self.assertTrue(ok)
+        self.assertEqual(content, icon)
+
+    def test_root_appicon_wins_over_larger_deep_logo_without_declaration(self):
+        icon = _fake_png(8480)
+        entries = {"AppIcon.png": icon, "assets/logo.png": _fake_png(27902)}
+        ok, content = self._run("Demo.app", {}, entries)
+        self.assertTrue(ok)
+        self.assertEqual(content, icon)
+
+    def test_deep_logo_still_works_without_native_icon(self):
+        logo = _fake_png(27902)
+        ok, content = self._run("Demo.app", {}, {"assets/logo.png": logo})
+        self.assertTrue(ok)
+        self.assertEqual(content, logo)
+
+    def test_deep_logo_is_used_when_declared_icon_is_invalid(self):
+        ns = self._extractor()
+        ns["_normalize_png"] = lambda path: path.read_bytes() != b"invalid"
+        logo = _fake_png(27902)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("Payload/Demo.app/icon.png", b"invalid")
+            zf.writestr("Payload/Demo.app/assets/logo.png", logo)
+        buf.seek(0)
+        with zipfile.ZipFile(buf, "r") as zf, tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "out.png"
+            self.assertTrue(ns["extract_largest_icon"](
+                zf, "Demo.app", {"CFBundleIconFiles": ["icon"]}, out
+            ))
+            self.assertEqual(out.read_bytes(), logo)
+
     def test_missing_icon_returns_false(self):
         plist = {}
         entries = {"background.png": _fake_png(512)}
