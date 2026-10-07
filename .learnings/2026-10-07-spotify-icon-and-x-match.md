@@ -23,19 +23,22 @@ Apple lookup ID 324684580、bundle com.spotify.client；持 scanner 锁备份原
 
 **Logged**: 2026-10-07
 **Priority**: medium
-**Status**: pending
+**Status**: resolved
 **Area**: backend
 
 ### Summary
 单字母独立词匹配仍会误收其他应用：BALL x PIT 文件名中的 x 命中 X/Twitter 白名单。
 
-### Evidence and next action
-生产 match_whitelist 实测返回 X，tg-cron.log 记录 [X] 下载并 OK，文件在 X 目录。本次诊断未授权修改匹配规则或清理游戏。后续修复应限定单字母应用名的位置，保留真实 X 和 NeoFreeBird/Twitter 别名，增加误收回归场景。只从 keywords 删除 X 无效，因为 `_terms_for` 自动把 name=X 也作为关键词。
+### Evidence and resolution
+生产 match_whitelist 实测返回 X，tg-cron.log 记录 [X] 下载并 OK，文件在 X 目录。只从 keywords 删除 X 无效，因为 `_terms_for` 自动把 name=X 也作为关键词。
+
+Hoya 后续明确要求修复白名单规则。修复单字符 ASCII 字母/数字关键词：仅允许其等于从文件名提取的完整应用名，禁止在其他名称或后缀中匹配；较长别名沿用原逻辑。74 项回归全部通过。只读对比生产全部 275 个 IPA 文件名，4 个变化均为误收：BALL x PIT、Blued X、Quantumult X 两个文件；其他匹配不变，8 个真实 X 文件（含 10.76）继续匹配。源码修复已验证；生产部署仍需按 AGENTS.md 明确确认容器更新，尚未在 NAS 生效。未改生产配置、订阅或 IPA 文件。
 
 ### Metadata
 - Source: user_feedback
 - Related Files: rootfs/app/ipa_matcher.py, tests/test_ipa_matcher.py
 - Pattern-Key: whitelist.single-letter-position
+- Verification artifacts: .release/whitelist-single-letter-20261007/tests.log, live-dry-run.json
 
 ## [ERR-20261007-001] diagnostic-scope-and-tool-assumptions
 

@@ -42,8 +42,10 @@ def _best_match_in(segment: str, whitelist: list, source_rank: int):
         for term in _terms_for(app):
             folded = term.casefold()
             if len(folded) == 1 and folded.isascii() and folded.isalnum():
-                found = re.search(rf"(?<![a-z0-9]){re.escape(folded)}(?![a-z0-9])", haystack)
-                pos = found.start() if found else -1
+                # A single letter is only useful as the complete app-name
+                # prefix. A separate "x" inside "BALL x PIT", or in a
+                # package's suffix, does not identify the X/Twitter app.
+                pos = 0 if source_rank == 0 and haystack == folded else -1
             else:
                 pos = haystack.find(folded)
             if pos < 0:
@@ -63,6 +65,8 @@ def match_whitelist(filename: str, message_text: str, whitelist: list) -> Option
     are descriptive, untrusted metadata and can mention another whitelisted App
     without identifying the attached IPA. Keeping the argument preserves the
     existing caller API while preventing caption-only false-positive downloads.
+    Single-character ASCII terms must equal the extracted app name; longer
+    aliases retain the existing filename matching behavior.
     """
     candidates = [
         _best_match_in(filename_app_name(filename), whitelist, 0),
