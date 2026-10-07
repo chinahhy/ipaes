@@ -32,13 +32,17 @@ Apple lookup ID 324684580、bundle com.spotify.client；持 scanner 锁备份原
 ### Evidence and resolution
 生产 match_whitelist 实测返回 X，tg-cron.log 记录 [X] 下载并 OK，文件在 X 目录。只从 keywords 删除 X 无效，因为 `_terms_for` 自动把 name=X 也作为关键词。
 
-Hoya 后续明确要求修复白名单规则。修复单字符 ASCII 字母/数字关键词：仅允许其等于从文件名提取的完整应用名，禁止在其他名称或后缀中匹配；较长别名沿用原逻辑。74 项回归全部通过。只读对比生产全部 275 个 IPA 文件名，4 个变化均为误收：BALL x PIT、Blued X、Quantumult X 两个文件；其他匹配不变，8 个真实 X 文件（含 10.76）继续匹配。源码修复已验证；生产部署仍需按 AGENTS.md 明确确认容器更新，尚未在 NAS 生效。未改生产配置、订阅或 IPA 文件。
+Hoya 后续明确要求修复白名单规则。修复单字符 ASCII 字母/数字关键词：仅允许其等于从文件名提取的完整应用名，禁止在其他名称或后缀中匹配；较长别名沿用原逻辑。74 项回归全部通过。只读对比生产全部 275 个 IPA 文件名，4 个变化均为误收：BALL x PIT、Blued X、Quantumult X 两个文件；其他匹配不变，8 个真实 X 文件（含 10.76）继续匹配。
+
+Hoya 确认发布后，源码 0dc1727 经 GitHub Actions 37558305367 成功构建发布 latest。Docker Hub amd64/arm64 revision 均核验，index digest 为 sha256:8ce83e73bc42ea44e9570d2453e2d189eac6f6c04109dbdc08c4c6499e69ea18。NAS 已更新并验收：实际匹配器哈希正确，误收名称返回不匹配；正常 X/别名通过；WebUI 隐藏误收条目。容器 healthy、restarts=0，接口 200、IPA Range 206。配置、端口、挂载、X 10.76 内容哈希及 Spotify 覆盖图标保持不变，两份订阅除图标 URL 外逐字段语义校验一致。误收 IPA 文件未删除；不宣称后续定时扫描或真机客户端已经验收。
 
 ### Metadata
 - Source: user_feedback
 - Related Files: rootfs/app/ipa_matcher.py, tests/test_ipa_matcher.py
 - Pattern-Key: whitelist.single-letter-position
 - Verification artifacts: .release/whitelist-single-letter-20261007/tests.log, live-dry-run.json
+- Fix commit: 0dc1727; production verification: .release/whitelist-single-letter-20261007/nas-verification.json
+- Rollback: NAS ipaes 项目内 .deployment-backups/20261007-whitelist-single-letter/（旧镜像、只含镜像字段的 Compose 覆盖与脱敏校验信息；不复制凭据配置）
 
 ## [ERR-20261007-001] diagnostic-scope-and-tool-assumptions
 
