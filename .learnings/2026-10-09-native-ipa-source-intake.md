@@ -11,6 +11,8 @@
 
 IPAes 的公网订阅 JSON 位于 `REPO_BASE_URL` 本身；不能在源地址后追加 `/repo.json`。实际 IPA 数据卷也应从运行容器挂载读取，不能按仓库 Compose 默认值猜测。
 
+热更新订阅路径后，容器进程的旧 `REPO_BASE_URL` 环境变量可能返回 404；以运行态 `/tmp/repo_base_url.applied` 为准。2026-10-09 更新 DSH Mobile 1.0.1 时，按生效地址验证公网源 200、唯一条目、IPA Range 206 与图标 PNG 200。
+
 ### Details
 
 将某次新 IPA 加入 NAS 软件源时，按下载链接推导 `/<源路径>/repo.json` 做本地验收得到 HTTP 404。核对 `apply-repo-path.sh` 后确认 nginx 将 `/<源路径>` 直接映射至 `/data/repo.json`；`/<源路径>/ipa/<文件名>` 才是 IPA 下载路由。
