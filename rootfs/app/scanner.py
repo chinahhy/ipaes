@@ -640,26 +640,11 @@ def _scan_unlocked():
     active, older = select_versions(apps)
     apps = active
 
-    def ver_cmp(v):
-        try: return tuple(int(x) for x in v.split("."))
-        except: return (0,)
-
-    by_bundle = {}
-    for m in apps:
-        bid = m.get("bundleIdentifier")
-        if not bid: continue
-        prev = by_bundle.get(bid)
-        if prev is None:
-            by_bundle[bid] = m
-        else:
-            if ver_cmp(m["version"]) > ver_cmp(prev["version"]):
-                by_bundle[bid] = m
-            elif ver_cmp(m["version"]) == ver_cmp(prev["version"]) and m["mtime"] > prev["mtime"]:
-                by_bundle[bid] = m
-
-    sorted_metas = sorted(by_bundle.values(), key=lambda x: (-x["mtime"], x.get("bundleIdentifier", "")))
+    # 保留策略已选出本地有效版本；每个版本发布独立条目，不能再按 Bundle ID
+    # 压成最新版。沿用客户端现有的平铺 apps 协议及每个 IPA 的原始字段。
+    sorted_metas = sorted(apps, key=lambda x: (-x["mtime"], x.get("bundleIdentifier", "")))
     final_apps = [build_app_entry(m) for m in sorted_metas]
-    print(f"📊 合并: 总IPA{len(apps)}个 → 去重后{len(final_apps)}个app（按mtime倒序）")
+    print(f"📊 发布: 本地保留{len(apps)}个IPA → 订阅{len(final_apps)}个版本（按mtime倒序）")
 
     # ---- 顶层结构：全能签源协议（参照 CN-CodeMan/AppStore App.json 实际部署案例）----
     # 全能签客户端期望的字段：name/message/identifier/sourceURL/sourceicon/payURL/unlockURL/apps
@@ -725,7 +710,7 @@ def _scan_unlocked():
     except Exception as _e:
         print(f"⚠️ 同步描述库失败: {_e}")
 
-    print(f"\n✅ 完成！合并后 {len(final_apps)} 个app（IPA文件{len(apps)}个）")
+    print(f"\n✅ 完成！已发布 {len(final_apps)} 个版本（IPA文件{len(apps)}个）")
     return len(apps)
 
 

@@ -47,3 +47,45 @@ SSH 返回 Operation not permitted；Git 无法创建 .git/index.lock，返回 O
 
 ### Resolution
 - **Notes**: 提权后连接成功，检查点 51455af 已创建。
+
+## [LRN-20261016-002] correction
+
+**Logged**: 2026-10-16
+**Priority**: high
+**Status**: resolved
+**Area**: backend
+
+### Summary
+Hoya 明确要求订阅版本与当前留存版本一致；诊断原因不能代替实现这个目标。
+
+### Details
+移除保留策略之后的 Bundle ID 最新版折叠，沿用已有平铺 apps 协议，为每个有效留存 IPA 发布独立条目。不改变版本保留、归档规则或每个条目的字段。参考现有协议来源 CN-CodeMan/AppStore 的 App.json，含同名多版本平铺条目。
+
+### Metadata
+- Source: user_feedback
+- Related Files: rootfs/app/scanner.py, tests/test_scanner_retention.py
+- See Also: LRN-20261016-001
+- Pattern-Key: ipa-source.retention-versus-publication
+
+### Resolution
+- **Notes**: 75 项回归测试通过；包含重复扫描、逐版本说明和下载链接、两份源一致、归档不入源与 X 10.76 保护。NAS 只读候选预演：107 个当前留存文件对应 107 条订阅（原为 47 条），全部原有条目逐字段不变；小红书 5 个版本均入源，5 条下载链接返回 Range 206 且包含 ZIP 头。此为候选验证，生产发布和真机展示尚待验收。
+
+## [ERR-20261016-002] candidate-module-file-context
+
+**Logged**: 2026-10-16
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+通过 ModuleType 和 exec 预演依赖相对文件路径的候选模块时，必须设置 __file__。
+
+### Error
+候选 scanner 顶层使用 Path(__file__)，初次只读预演报 NameError: name '__file__' is not defined。
+
+### Resolution
+- **Notes**: 在内存候选模块上设置 __file__=/app/scanner.py 后预演成功；没有运行 scanner.scan 或改动 NAS 数据。
+
+### Metadata
+- Related Files: .release/source-versions-20261016/preview.py
+- Pattern-Key: tests.exec-module-file-context
