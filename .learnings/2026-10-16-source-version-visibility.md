@@ -69,6 +69,8 @@ Hoya 明确要求订阅版本与当前留存版本一致；诊断原因不能代
 
 ### Resolution
 - **Notes**: 75 项回归测试通过；包含重复扫描、逐版本说明和下载链接、两份源一致、归档不入源与 X 10.76 保护。NAS 只读候选预演：107 个当前留存文件对应 107 条订阅（原为 47 条），全部原有条目逐字段不变；小红书 5 个版本均入源，5 条下载链接返回 Range 206 且包含 ZIP 头。此为候选验证，生产发布和真机展示尚待验收。
+- **Commit/PR**: cd4e0dd3edbfaf5b0c7f19f03dde54c64f504a5e
+- **Production verification**: Hoya 明确批准发布并更新 NAS。GitHub Actions 38843662999 成功，Docker Hub latest 的 amd64/arm64 OCI revision 均为 cd4e0dd，index digest 为 sha256:36028f535c69eae6afd9758fd9f2e484d9270ff744430c12642af25fdc2492a2。NAS 已按 latest 重建并核对运行镜像，healthy、restarts=0。实际两份订阅均发布 107 个版本，对应全部 107 个当前留存 IPA；全部本机下载 Range 206，小红书 9.50.1、9.49.5、9.49.4、9.49.1、9.49 的公网下载也全部 Range 206，且与 WebUI 文件列表一致。公网订阅 200；原有条目全部字段、顶层元数据、活动订阅 URL、配置、端口、挂载与受保护 X 10.76 文件内容均保持不变。保留旧镜像 ID 与 NAS 项目内权限受限的部署备份，可用 rollback-image.json 回退。尚未直接观察手机刷新后的客户端界面。
 
 ## [ERR-20261016-002] candidate-module-file-context
 
