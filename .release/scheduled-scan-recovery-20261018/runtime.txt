@@ -1,0 +1,9 @@
+2026-10-19T00:24:59+08:00
+status=running health=healthy restarts=0 started=2026-10-17T17:15:44.225423102Z image_ref=hoya0803/ipaes:latest image_id=sha256:6a92cc03b482ea8e9e92ea06d61ae7dde1e699ba600534457fcfd6f441ffe69c revision=cd4e0dd3edbfaf5b0c7f19f03dde54c64f504a5e
+cron                             RUNNING   pid 91, uptime 23:09:10
+forward-bot                      RUNNING   pid 90, uptime 23:09:10
+nginx                            RUNNING   pid 73, uptime 23:09:10
+scanner-watcher                  RUNNING   pid 74, uptime 23:09:10
+webui                            RUNNING   pid 81, uptime 23:09:10
+remaining_scan_processes=[]
+session_lock=released

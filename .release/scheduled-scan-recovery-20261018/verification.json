@@ -1,0 +1,49 @@
+{
+  "verified_at": "2026-10-19T00:25:07.905723",
+  "proxy": "http://10.0.0.2:6666",
+  "cron_schedule": "0 1,13 * * *",
+  "scheduled_lookback_hours": 25,
+  "recovery_lookback_hours": 36,
+  "message_limit_per_group": 500,
+  "groups_checked": 9,
+  "summary": "📊 总结: 发现34个IPA, 下载4个, 跳过30个",
+  "notification_accepted": true,
+  "last_scan": "2026-10-19T00:24:01.033040",
+  "apps_before": 107,
+  "apps_after": 108,
+  "targets": [
+    {
+      "filename": "Infuse_8.5.8_彭于晏Crack.ipa",
+      "size": 107009619,
+      "zip_crc": "ok",
+      "published": true,
+      "range_status": 206
+    },
+    {
+      "filename": "Spotify_9.1.90.ipa",
+      "size": 155635638,
+      "zip_crc": "ok",
+      "published": true,
+      "range_status": 206
+    },
+    {
+      "filename": "网易云音乐_9.6.09.ipa",
+      "size": 247484030,
+      "zip_crc": "ok",
+      "published": true,
+      "range_status": 206
+    },
+    {
+      "filename": "Facebook Plus 1.0.2 (FB 583.0.0) [@ipavault].ipa",
+      "size": 221760905,
+      "zip_crc": "ok",
+      "published": true,
+      "range_status": 206
+    }
+  ],
+  "unrelated_config_unchanged": true,
+  "protected_x_10_76_unchanged": true,
+  "subscription_schema_and_url_unchanged": true,
+  "subscription_status": 200,
+  "backup": "/data/.incident-backups/20261018-234742-scheduled-scan"
+}
