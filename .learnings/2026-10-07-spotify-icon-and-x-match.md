@@ -60,3 +60,6 @@ Hoya 确认发布后，源码 0dc1727 经 GitHub Actions 37558305367 成功构�
 ### Metadata
 - Related Files: .learnings/2026-10-05-netease-icon.md, .release/spotify-icon-20261007/report.md
 - Pattern-Key: diagnostics.minimal-redacted-production-evidence
+
+### Revalidation (2026-10-18)
+只读扫描逻辑核对再次遇到沙箱 SSH 拒绝、普通账号 Docker socket 拒绝，以及 zsh 未匹配通配符；正式审批的 SSH 配合既有 `sudo -n docker` 成功核对容器源码摘要和脱敏配置。不存在的可选运行时目录也会使 `rg` 返回 2；先通过文件清单确认路径，再搜索。以上均为诊断执行环境问题，未修改 NAS 权限、配置或服务。已有条目覆盖相同原因，本次只补充复验结果。
