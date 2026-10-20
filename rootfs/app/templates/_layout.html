@@ -1381,6 +1381,7 @@
     background:var(--muted);
   }
   .dot.on { background:var(--good) }
+  .dot.warn { background:#f59e0b }
   .code {
     display:inline-block;
     padding:4px 8px;
@@ -2159,8 +2160,10 @@ function ipaApp() {
       await Promise.allSettled([this.loadProxy(), this.loadBot(), this.loadAccount(), this.loadUnlock(), this.loadRepoInfo(), this.loadRepoPath()]);
       setInterval(() => {
         if (this.workspace === 'logs' && this.autoRefresh) this.loadLog();
-        if (this.workspace === 'apps') this.loadStatus();
-      }, 3000);
+      }, 5000);
+      setInterval(() => {
+        if (this.workspace === 'apps' || this.workspace === 'ops') this.loadStatus();
+      }, 15000);
       this.startAutoSync();
     },
 
@@ -2455,7 +2458,8 @@ function ipaApp() {
       this.appGroups = arr;
     },
 
-    async api(method, url, body) {
+    async api(method, url, body, opts) {
+      const silent = !!(opts && opts.silent);
       try {
         const r = await fetch(url, {
           method,
@@ -2470,7 +2474,7 @@ function ipaApp() {
         if (!r.ok) throw new Error(j.error || r.statusText);
         return j;
       } catch (e) {
-        this.showToast(e.message, 'err');
+        if (!silent) this.showToast(e.message, 'err');
         throw e;
       }
     },
@@ -2496,7 +2500,51 @@ function ipaApp() {
     },
 
     async loadStatus() {
-      this.status = await this.api('GET', '/api/status');
+      try {
+        this.status = await this.api('GET', '/api/status', null, { silent: true });
+      } catch (e) {
+        // Keep the last known state; the next poll retries without toast spam.
+      }
+    },
+
+    scanStatusText() {
+      const s = this.status || {};
+      if (s.session_present === false) return 'TG session 未登录';
+      if (s.scan_stale) return '扫描似乎已中断';
+      if (s.last_scan_status === 'running') return '扫描进行中…';
+      const age = s.last_scan_age_seconds;
+      const when = (age == null) ? '还没有扫描记录' : this.formatAge(age);
+      if (s.last_scan_status === 'error') return '上次扫描失败 · ' + when;
+      if (s.last_scan_status === 'ok') return '上次扫描成功 · ' + when;
+      return when;
+    },
+
+    statusWarn() {
+      const s = this.status || {};
+      return s.session_present === false
+        || s.scan_stale === true
+        || s.last_scan_status === 'error'
+        || (typeof s.last_scan_age_seconds === 'number' && s.last_scan_age_seconds > 26 * 3600);
+    },
+
+    formatAge(sec) {
+      const n = Math.max(0, Number(sec) || 0);
+      if (n < 60) return '刚刚';
+      if (n < 3600) return Math.round(n / 60) + ' 分钟前';
+      if (n < 86400) return Math.round(n / 3600) + ' 小时前';
+      return Math.round(n / 86400) + ' 天前';
+    },
+
+    logLabel() {
+      const labels = {
+        'tg-cron': 'TG 扫描',
+        'tg-runtime': 'TG 运行日志',
+        'scanner': '仓库扫描',
+        'nginx-error': 'Nginx 错误',
+        'forward-bot': '转发 Bot',
+        'webui': 'WebUI',
+      };
+      return labels[this.logName] || '日志';
     },
 
     async loadIpa() {
@@ -2596,17 +2644,22 @@ function ipaApp() {
     },
 
     async loadLog() {
-      const r = await fetch('/api/logs/' + this.logName + '?lines=300');
-      if (r.status === 401) {
-        window.location.href = '/login';
-        return;
+      try {
+        const r = await fetch('/api/logs/' + this.logName + '?lines=300');
+        if (r.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        this.logContent = (j.lines || []).join('');
+        this.$nextTick(() => {
+          const pre = document.querySelector('pre.log');
+          if (pre) pre.scrollTop = pre.scrollHeight;
+        });
+      } catch (e) {
+        this.logContent = '读取日志失败：' + (e && e.message ? e.message : e);
       }
-      const j = await r.json();
-      this.logContent = (j.lines || []).join('');
-      this.$nextTick(() => {
-        const pre = document.querySelector('pre.log');
-        if (pre) pre.scrollTop = pre.scrollHeight;
-      });
     },
 
     async addGroup() {
@@ -2729,28 +2782,6 @@ function ipaApp() {
         setTimeout(() => { window.location.href = '/login'; }, 3000);
       } catch (e) {}
       this.accountSaving = false;
-    },
-
-    async changePassword() {
-      if (!this.account.newPassword || !this.account.confirmPassword) {
-        this.showToast('请填写新密码', 'err');
-        return;
-      }
-      if (this.account.newPassword !== this.account.confirmPassword) {
-        this.showToast('两次密码不一致', 'err');
-        return;
-      }
-      if (this.account.newPassword.length < 4) {
-        this.showToast('新密码至少 4 位', 'err');
-        return;
-      }
-      try {
-        await this.api('PUT', '/api/password', {
-          new_password: this.account.newPassword,
-        });
-        this.showToast('已修改，3 秒后跳转登录');
-        setTimeout(() => { window.location.href = '/login'; }, 3000);
-      } catch (e) {}
     },
 
     async logout() {

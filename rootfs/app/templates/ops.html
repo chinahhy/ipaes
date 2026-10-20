@@ -157,23 +157,26 @@
           <div class="panel-head">
             <div class="head-block">
               <h2>扫描</h2>
-              <span x-text="'每日 ' + (cfg.rate_limit?.max_per_day || 30) + ' 次'"></span>
+              <span x-text="'每日上限 ' + (cfg.rate_limit?.max_per_day || 50) + ' 个'"></span>
             </div>
           </div>
           <div class="panel-body">
+            <div class="inline-status" style="margin-bottom:14px">
+              <div class="status-line">
+                <span class="dot" :class="{on: !statusWarn(), warn: statusWarn()}"></span>
+                <span x-text="scanStatusText()"></span>
+              </div>
+              <div class="muted" x-show="status.last_scan_error" x-cloak x-text="status.last_scan_error"
+                   style="margin-top:6px;font-size:12px;line-height:1.6;word-break:break-word"></div>
+            </div>
             <div class="scan-grid">
               <div class="field">
-                <label>每日最多</label>
+                <label>每日最多下载</label>
                 <input type="number" x-model.number="cfg.rate_limit.max_per_day" min="1">
               </div>
-              <div class="field">
-                <label>最小间隔</label>
-                <input type="number" x-model.number="cfg.rate_limit.min_interval_sec" min="1">
-              </div>
-              <div class="field">
-                <label>最大间隔</label>
-                <input type="number" x-model.number="cfg.rate_limit.max_interval_sec" min="1">
-              </div>
+            </div>
+            <div class="muted" style="font-size:12px;line-height:1.6;margin-top:6px">
+              按成功入库的 IPA 计数；达到上限后本轮扫描停止下载，次日自动恢复。
             </div>
             <div class="actions end">
               <button type="button" class="btn primary" @click="saveRate()">保存</button>

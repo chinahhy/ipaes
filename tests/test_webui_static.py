@@ -6,11 +6,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-INDEX_HTML = ROOT / "rootfs" / "app" / "webui_static" / "index.html"
+LAYOUT_HTML = ROOT / "rootfs" / "app" / "templates" / "_layout.html"
+OPS_HTML = ROOT / "rootfs" / "app" / "templates" / "ops.html"
 
 
 def _scripts():
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    html = LAYOUT_HTML.read_text(encoding="utf-8")
     return re.findall(r"<script>(.*?)</script>", html, re.S)
 
 
@@ -84,7 +85,8 @@ class WebuiStaticRegressionTests(unittest.TestCase):
         self.assertEqual(_run_node(js), "dark")
 
     def test_repo_url_input_is_addressable_by_copy_fallback(self):
-        html = INDEX_HTML.read_text(encoding="utf-8")
+        html = OPS_HTML.read_text(encoding="utf-8")
+        layout = LAYOUT_HTML.read_text(encoding="utf-8")
         subscription_input = re.search(
             r'<input\s+[^>]*:value="repoInfo\.url"[^>]*readonly[^>]*>',
             html,
@@ -92,8 +94,8 @@ class WebuiStaticRegressionTests(unittest.TestCase):
         self.assertIsNotNone(subscription_input, "subscription URL input not found")
         assert subscription_input is not None
         self.assertIn('x-ref="repoUrlInput"', subscription_input.group(0))
-        self.assertIn("this.$refs && this.$refs.repoUrlInput", html)
-        self.assertIn("input.select();", html)
+        self.assertIn("this.$refs && this.$refs.repoUrlInput", layout)
+        self.assertIn("input.select();", layout)
 
 
 if __name__ == "__main__":

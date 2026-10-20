@@ -13,7 +13,8 @@ from ipa_storage import iter_ipas, resolve_ipa
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_matcher import match_whitelist
-from ipa_retention import PROTECTED_FILES
+from ipa_retention import is_protected, is_protected_path
+from jsonstore import atomic_write_json, load_json
 
 CONFIG_PATH = Path("/config/config.json")
 STATE_PATH = Path("/config/state.json")
@@ -68,7 +69,7 @@ def _write_auth(username=None, password=None):
     if password is not None:
         auth["password"] = password
     AUTH_PATH.parent.mkdir(parents=True, exist_ok=True)
-    AUTH_PATH.write_text(json.dumps(auth, ensure_ascii=False, indent=2))
+    atomic_write_json(AUTH_PATH, auth)
 
 def _write_password(new_pass):
     _write_auth(password=new_pass)
@@ -98,31 +99,33 @@ app = Flask(
 
 # ============ 工具函数 ============
 def load_config():
-    if not CONFIG_PATH.exists():
-        return {}
-    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    # recover=True falls back to the newest config.json.bak-* when the main
+    # file is truncated by a power loss or a stopped container.
+    data = load_json(CONFIG_PATH, {}, recover=True)
+    return data if isinstance(data, dict) else {}
 
 def save_config(cfg):
     if CONFIG_PATH.exists():
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         bak = CONFIG_PATH.with_suffix(f".json.bak-{ts}")
-        shutil.copy2(CONFIG_PATH, bak)
+        try:
+            shutil.copy2(CONFIG_PATH, bak)
+        except OSError:
+            pass
         baks = sorted(CONFIG_PATH.parent.glob("config.json.bak-*"))
         for old in baks[:-10]:
-            old.unlink()
-    CONFIG_PATH.write_text(
-        json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    atomic_write_json(CONFIG_PATH, cfg)
 
 def load_state():
-    if not STATE_PATH.exists():
-        return {}
-    return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    data = load_json(STATE_PATH, {})
+    return data if isinstance(data, dict) else {}
 
 def save_state(state):
-    STATE_PATH.write_text(
-        json.dumps(state, ensure_ascii=False, indent=2)
-    )
+    atomic_write_json(STATE_PATH, state)
 
 # ============ 认证：Cookie 优先，Basic Auth 兼容 ============
 def check_auth():
@@ -335,6 +338,7 @@ def api_list_ipa():
                     "app_name": m.get("name", ""),
                     "bundle_id": m.get("bundleIdentifier", ""),
                     "version": m.get("version", ""),
+                    "build": m.get("build", ""),
                     "icon": m.get("icon_filename"),
                 }
         except Exception:
@@ -361,8 +365,12 @@ def api_list_ipa():
             m = meta_by_name.get(f.name, {})
             fallback = _filename_meta(f.name)
             meta_ok = bool(m.get("app_name") and m.get("bundle_id") and m.get("version"))
-            is_zip = zipfile.is_zipfile(f)
-            scan_status = "ok" if meta_ok else ("invalid" if not is_zip else "unscanned")
+            if meta_ok:
+                scan_status = "ok"
+            else:
+                # Only uncached files need a signature read; cached files keep
+                # the scanner's verdict and avoid touching every IPA on each poll.
+                scan_status = "unscanned" if zipfile.is_zipfile(f) else "invalid"
             app_name = m.get("app_name") or fallback["app_name"]
             if not _in_whitelist(f.name, app_name):
                 continue
@@ -379,7 +387,9 @@ def api_list_ipa():
                 "icon": m.get("icon"),
                 "scan_status": scan_status,
                 "downloadable": scan_status != "invalid",
-                "protected": f.name in PROTECTED_FILES,
+                "protected": is_protected(
+                    f.name, m.get("bundle_id"), m.get("version"), m.get("build")
+                ),
                 "highlights": desc_rec.get("highlights") or [],
                 "raw_message": desc_rec.get("raw_text") or "",
                 "source_message": desc_rec.get("source") or "",
@@ -399,27 +409,33 @@ def api_del_ipa():
     cache_path = IPA_DIR.parent / ".scan_cache.json"
     cache = {}
     if cache_path.exists():
-        try: cache = json.loads(cache_path.read_text())
-        except: pass
+        try:
+            cache = json.loads(cache_path.read_text())
+        except (OSError, ValueError):
+            cache = {}
     state = load_state()
     for fname in filenames:
-        if "/" in fname or ".." in fname or not fname.endswith(".ipa"):
+        if not isinstance(fname, str) or "/" in fname or ".." in fname or not fname.endswith(".ipa"):
             errors.append(f"{fname}: 非法文件名")
             continue
-        if fname in PROTECTED_FILES:
+        meta = (cache.get(fname, {}).get("meta") or {})
+        if is_protected(
+            fname, meta.get("bundleIdentifier"), meta.get("version"), meta.get("build")
+        ):
             errors.append(f"{fname}: 该文件受保护，禁止删除")
             continue
         ipa_path = resolve_ipa(IPA_DIR, fname)
         if ipa_path is None:
             errors.append(f"{fname}: 文件不存在")
             continue
+        if is_protected_path(ipa_path):
+            errors.append(f"{fname}: 该文件受保护，禁止删除")
+            continue
         try:
             ipa_path.unlink()
-            icon_name = (cache.get(fname, {}).get("meta") or {}).get("icon_filename")
-            if icon_name:
-                icon_path = ICONS_DIR / icon_name
-                if icon_path.exists():
-                    icon_path.unlink()
+            # The icon is shared by every version of the same bundle.  Leave it
+            # in place; the scanner removes it only when no cached version uses
+            # it, avoiding a window where the surviving versions lose their icon.
             dv = state.get("downloaded_versions", {})
             for vk in list(dv.keys()):
                 if vk and (vk in fname or fname.startswith(vk)):
@@ -497,11 +513,33 @@ def api_reindex():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+def _tail_lines(path: Path, count: int) -> list[str]:
+    """Read only the last *count* lines without loading a multi-MB log."""
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        block = 8192
+        data = b""
+        while size > 0 and data.count(b"\n") <= count:
+            step = min(block, size)
+            size -= step
+            handle.seek(size)
+            data = handle.read(step) + data
+    text = data.decode("utf-8", "replace")
+    return [line + "\n" for line in text.splitlines()[-count:]]
+
+
 @app.route("/api/logs/<name>", methods=["GET"])
 @require_auth
 def api_get_log(name):
-    allow = {"tg-cron": "tg-cron.log", "scanner": "scanner.log",
-             "nginx-error": "nginx-error.log"}
+    allow = {
+        "tg-cron": "tg-cron.log",
+        "tg-runtime": "tg-runtime.log",
+        "scanner": "scanner.log",
+        "nginx-error": "nginx-error.log",
+        "forward-bot": "forward-bot.log",
+        "webui": "webui-stderr.log",
+    }
     if name not in allow:
         return jsonify({"error": "日志名非法"}), 400
     path = LOG_DIR / allow[name]
@@ -510,9 +548,8 @@ def api_get_log(name):
     lines = int(request.args.get("lines", "200"))
     lines = max(10, min(2000, lines))
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.readlines()
-        return jsonify({"lines": content[-lines:], "total": len(content)})
+        content = _tail_lines(path, lines)
+        return jsonify({"lines": content, "total": len(content)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -565,10 +602,9 @@ def _load_repo_path_override():
 
 
 def _save_repo_path_override(code: str):
-    REPO_PATH_OVERRIDE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPO_PATH_OVERRIDE_PATH.write_text(
-        json.dumps({"code": code, "updated_at": datetime.now().isoformat(timespec="seconds")},
-                   ensure_ascii=False, indent=2)
+    atomic_write_json(
+        REPO_PATH_OVERRIDE_PATH,
+        {"code": code, "updated_at": datetime.now().isoformat(timespec="seconds")},
     )
 
 
@@ -734,7 +770,7 @@ def api_regenerate_token():
             conf = {}
     new_token = secrets.token_urlsafe(24)
     conf["token"] = new_token
-    p.write_text(json.dumps(conf, ensure_ascii=False, indent=2))
+    atomic_write_json(p, conf)
     return jsonify({"ok": True, "msg": "Token 已重新生成。需要重启容器生效，且所有订阅链接需要更新。", "token_preview": f"{new_token[:4]}...{new_token[-4:]}"})
 
 @app.route("/api/unlock", methods=["PUT"])
@@ -769,7 +805,7 @@ def api_set_unlock():
             old_conf = {}
     new_conf = dict(old_conf)
     new_conf.update({"enabled": enabled, "code": code, "code_expires_at": expires_at_iso})
-    p.write_text(json.dumps(new_conf, ensure_ascii=False, indent=2))
+    atomic_write_json(p, new_conf)
     return jsonify({"ok": True, "msg": "已保存，立即生效。"})
 
 @app.route("/auth", methods=["GET", "POST"])
@@ -822,8 +858,7 @@ def _load_reset_ticket():
         return {}
 
 def _save_reset_ticket(ticket):
-    RESET_PATH.parent.mkdir(parents=True, exist_ok=True)
-    RESET_PATH.write_text(json.dumps(ticket, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(RESET_PATH, ticket)
 
 def _write_reset_log(username: str, code: str):
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -865,20 +900,6 @@ def api_set_account():
     _write_auth(username=next_user, password=(next_pw or None))
     _clear_sessions()
     return jsonify({"ok": True, "msg": "账号已更新，请重新登录。"})
-
-@app.route("/api/password", methods=["PUT"])
-@require_auth
-def api_set_password():
-    data = request.get_json(force=True) or {}
-    new_pw = (data.get("new_password") or "").strip()
-    if len(new_pw) < 4 or len(new_pw) > 64:
-        return jsonify({"error": "新密码必须 4-64 位"}), 400
-    if new_pw == _read_password():
-        return jsonify({"error": "新密码不能与当前密码相同"}), 400
-    _write_password(new_pw)
-    # 改密码后清所有 session，强制重新登录
-    _clear_sessions()
-    return jsonify({"ok": True, "msg": "密码已修改，请重新登录。"})
 
 @app.route("/api/password/forgot/request", methods=["POST"])
 def api_forgot_password_request():
@@ -988,8 +1009,7 @@ def _load_proxy_config():
 
 def _save_proxy_config(cfg):
     """保存代理配置"""
-    PROXY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PROXY_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2))
+    atomic_write_json(PROXY_PATH, cfg)
 
 @app.route("/api/proxy", methods=["GET"])
 @require_auth
@@ -1184,10 +1204,7 @@ def _sync_forward_bot_user_ids(user_ids):
         else:
             data.pop("user_id", None)
             data.pop("user_ids", None)
-        FORWARD_BOT_CONFIG_PATH.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        atomic_write_json(FORWARD_BOT_CONFIG_PATH, data)
     except Exception as e:
         app.logger.warning("同步 forward_bot USER_ID 失败: %s", e)
 
@@ -1207,10 +1224,7 @@ def _sync_forward_bot_meta(token=None, bot_username=None, user_ids=None):
             else:
                 data.pop("user_id", None)
                 data.pop("user_ids", None)
-        FORWARD_BOT_CONFIG_PATH.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        atomic_write_json(FORWARD_BOT_CONFIG_PATH, data)
     except Exception as e:
         app.logger.warning("同步 forward_bot 配置失败: %s", e)
 
@@ -1273,7 +1287,9 @@ def api_get_bot():
     return jsonify({
         "enabled": notify.get("enabled", bool(token)),
         "token_preview": token_preview,
-        "token": token,
+        # Never return the full token to the browser; the preview is enough to
+        # identify the configured bot and a blank input means "keep existing".
+        "token": "",
         "has_token": bool(token),
         "chat_id": notify.get("chat_id"),
         "bot_username": notify.get("bot_username") or forward.get("bot_username", ""),
@@ -1354,27 +1370,34 @@ def api_test_bot():
         return jsonify({"ok": False, "error": f"{proxy_hint}: {str(e)[:120]}"}), 500
 
 
-# ============ API: 状态 + 重启 ============
+# ============ API: 状态 ============
+def _age_seconds(iso):
+    try:
+        stamp = datetime.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return None
+    now = datetime.now(stamp.tzinfo) if stamp.tzinfo else datetime.now()
+    return max(0, int((now - stamp).total_seconds()))
+
+
 @app.route("/api/status", methods=["GET"])
 @require_auth
 def api_status():
     state = load_state()
     ipa_count = len(list(iter_ipas(IPA_DIR))) if IPA_DIR.exists() else 0
+    scan_status = str(state.get("last_scan_status") or "unknown")
+    attempt_age = _age_seconds(state.get("last_scan_attempt"))
     return jsonify({
         "ipa_count": ipa_count,
-        "last_scan": state.get("last_scan", "未知"),
+        "last_scan": state.get("last_scan") or "",
+        "last_scan_age_seconds": _age_seconds(state.get("last_scan")),
+        "last_scan_status": scan_status,
+        "last_scan_error": str(state.get("last_scan_error") or "")[:300],
+        "last_scan_attempt": state.get("last_scan_attempt") or "",
+        "scan_stale": scan_status == "running" and (attempt_age or 0) > 12 * 3600,
+        "session_present": Path("/session/tg-ipa-bot.session").exists(),
         "downloaded_versions_count": len(state.get("downloaded_versions", {})),
     })
-
-@app.route("/api/restart", methods=["POST"])
-@require_auth
-def api_restart():
-    def _exit():
-        time.sleep(1)
-        os.kill(1, 15)
-    import threading
-    threading.Thread(target=_exit, daemon=True).start()
-    return jsonify({"ok": True, "msg": "容器将在 1 秒后重启，请稍候 5-10 秒刷新页面"})
 
 # ============ 静态文件 + 多页路由 (MPA) ============
 @app.route("/")
@@ -1402,9 +1425,22 @@ def page_ops():
 def page_logs():
     return render_template("logs.html", page_id="logs")
 
+PUBLIC_STATIC = {
+    "favicon.ico",
+    "icon-192.png",
+    "icon-512.png",
+    "icon-sunpanel.png",
+    "brand-icon.png",
+    "brand-icon.svg",
+}
+
+
 @app.route("/static/<path:p>")
-@require_auth
 def static_files(p):
+    # The login page needs its own icons before a session exists; everything
+    # else (Alpine bundle, app icons) stays behind authentication.
+    if p not in PUBLIC_STATIC and not check_auth():
+        return redirect("/login")
     if p.startswith("icons/"):
         return send_from_directory(ICONS_DIR, p.removeprefix("icons/"))
     return send_from_directory(STATIC_DIR, p)
@@ -1413,12 +1449,6 @@ def static_files(p):
 @require_auth
 def webui_icon_files(p):
     """WebUI 使用的原生 App 图标代理，文件来自 /data/icons。"""
-    return send_from_directory(ICONS_DIR, p)
-
-@app.route("/static/icons/<path:p>")
-@require_auth
-def icon_files(p):
-    """App 图标存放在 /data/icons/ 卷挂载目录"""
     return send_from_directory(ICONS_DIR, p)
 
 if __name__ == "__main__":

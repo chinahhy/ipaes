@@ -21,11 +21,12 @@
 """
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+
+from jsonstore import atomic_write_json, load_json
 
 DESC_PATH = Path("/data/.ipa_descriptions.json")
 MAX_RAW = 1500
@@ -110,17 +111,12 @@ def _strip_markdown(s: str) -> str:
 
 
 def _load() -> dict:
-    if not DESC_PATH.exists():
-        return {}
-    try:
-        return json.loads(DESC_PATH.read_text(encoding="utf-8")) or {}
-    except Exception:
-        return {}
+    data = load_json(DESC_PATH, {})
+    return data if isinstance(data, dict) else {}
 
 
 def _save(data: dict) -> None:
-    DESC_PATH.parent.mkdir(parents=True, exist_ok=True)
-    DESC_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(DESC_PATH, data)
 
 
 def _clean_line(line: str) -> str:
