@@ -10,6 +10,9 @@ Telegram IPA Scanner - cron 触发，按白名单下载IPA
   TG_SCAN_LIMIT - 每个群最多读取消息数（默认500）
   TG_DOWNLOAD_STALL_TIMEOUT - 单个媒体块无响应的超时秒数（默认180）
   TG_DOWNLOAD_ATTEMPTS - 单文件续传尝试次数（默认2）
+  TG_DOWNLOAD_REQUEST_SIZE - 单次 getFile 请求字节数（默认1MB）
+  TG_MAX_CONCURRENT - 同时下载文件数（默认1）
+  TG_DEDUPE_PENDING - 同一轮内按同版本/同路径去重（默认1）
 """
 import asyncio, json, logging, os, re, sys, zipfile
 from datetime import datetime, timedelta, timezone
@@ -131,6 +134,9 @@ DOWNLOAD_STALL_TIMEOUT = env_int("TG_DOWNLOAD_STALL_TIMEOUT", 180)
 DOWNLOAD_ATTEMPTS = env_int("TG_DOWNLOAD_ATTEMPTS", 2)
 DOWNLOAD_REQUEST_SIZE = env_int("TG_DOWNLOAD_REQUEST_SIZE", 1024 * 1024)
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("TG_MAX_CONCURRENT", "1"))  # 最大并发下载数
+DEDUPE_PENDING = os.environ.get("TG_DEDUPE_PENDING", "1").strip().lower() not in (
+    "0", "false", "no", "off",
+)
 NOTIFY_TIMEOUT = env_int("TG_NOTIFY_TIMEOUT", 30)
 NOTIFY_RETRIES = env_int("TG_NOTIFY_RETRIES", 3)
 NOTIFY_RETRY_DELAY = env_int("TG_NOTIFY_RETRY_DELAY", 8)
@@ -281,11 +287,63 @@ async def ensure_bot_menu(config):
         return False
 
 def version_label(filename):
+    """Return a user-facing version label for both underscore and space styles."""
     name = filename.rsplit(".", 1)[0] if "." in filename else filename
-    m = re.match(r"^.+?_(\d[\d.]*\d)_.*$", name)
-    if m:
-        return "v" + m.group(1)
-    return "新版本"
+    match = re.search(r"(?<![\d.])(\d+(?:\.\d+){1,3})(?![\d.])", name)
+    if not match:
+        return "新版本"
+    label = "v" + match.group(1)
+    host = re.search(
+        r"\(\s*(IG|FB|TW|TT|TikTok)\s*[_\s]*v?(\d+(?:\.\d+){1,3})\s*\)",
+        name,
+        re.IGNORECASE,
+    )
+    if host:
+        label += f" ({host.group(1).upper()} {host.group(2)})"
+    return label
+
+
+def pending_version_key(filename, app_name):
+    """Identity used to collapse same-version variants within one scan.
+
+    The first version-like token is the app/tweak version.  A parenthesized
+    host version (``(IG 410.1.0)``) is kept in the key so Sparkle builds for
+    different Instagram versions are not collapsed.  ``None`` means the
+    filename has no version information and must not be deduplicated by
+    version.
+    """
+    name = filename.rsplit(".", 1)[0] if "." in filename else filename
+    match = re.search(r"(?<![\d.])(\d+(?:\.\d+){1,3})(?![\d.])", name)
+    if not match:
+        return None
+    host = re.search(
+        r"\(\s*(IG|FB|TW|TT|TikTok)\s*[_\s]*v?(\d+(?:\.\d+){1,3})\s*\)",
+        name,
+        re.IGNORECASE,
+    )
+    host_key = f"{host.group(1).upper()}{host.group(2)}" if host else ""
+    return (str(app_name or "").strip().casefold(), match.group(1), host_key)
+
+
+def dedupe_pending_items(items):
+    """Keep one pending download per app/version/path for the current scan."""
+    kept, skipped = [], []
+    versions, paths = set(), set()
+    for item in items:
+        path = str(item.get("save_path") or "")
+        key = pending_version_key(item.get("filename", ""), item.get("app_name", ""))
+        if path and path in paths:
+            skipped.append((item, "同路径已排队"))
+            continue
+        if key is not None and key in versions:
+            skipped.append((item, "同版本已排队"))
+            continue
+        if path:
+            paths.add(path)
+        if key is not None:
+            versions.add(key)
+        kept.append(item)
+    return kept, skipped
 
 def compact_text(value, limit=76):
     text = str(value or "").strip()
@@ -397,6 +455,7 @@ def _default_state():
         "last_scan": None,
         "last_scan_status": "unknown",
         "last_scan_error": "",
+        "last_scan_errors": 0,
         "last_scan_attempt": None,
     }
 
@@ -413,6 +472,7 @@ def load_state():
     state.setdefault("last_scan", None)
     state.setdefault("last_scan_status", "unknown")
     state.setdefault("last_scan_error", "")
+    state.setdefault("last_scan_errors", 0)
     state.setdefault("last_scan_attempt", None)
     return state
 
@@ -882,6 +942,17 @@ async def main():
         for result in all_results:
             all_pending.extend(result.get("pending", []))
 
+        if DEDUPE_PENDING and all_pending:
+            all_pending, dedupe_skipped = dedupe_pending_items(all_pending)
+            for item, reason in dedupe_skipped:
+                log.info(f"  跳过（{reason}）: {item['filename']}")
+                for result in all_results:
+                    if result["group"] == item["group_link"]:
+                        result["skipped"] += 1
+                        break
+            if dedupe_skipped:
+                log.info("同轮去重：跳过 %d 个重复版本/路径", len(dedupe_skipped))
+
         if all_pending:
             log.info(f"开始并发下载 {len(all_pending)} 个 IPA（最多 {MAX_CONCURRENT_DOWNLOADS} 并发，单文件超时 {DOWNLOAD_TIMEOUT}秒）")
             semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
@@ -930,6 +1001,10 @@ async def main():
         total_ipa = sum(r["ipa_found"] for r in all_results)
         log.info(f"📊 总结: 发现{total_ipa}个IPA, 下载{total_dl}个, 跳过{total_skipped}个")
         await send_scan_notification(config, all_results, total_ipa, total_dl, total_skipped)
+        state["last_scan_errors"] = sum(
+            len(result.get("errors", [])) for result in all_results
+        )
+        save_state(state)
 
     finally:
         try:

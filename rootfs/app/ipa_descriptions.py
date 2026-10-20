@@ -21,7 +21,9 @@
 """
 from __future__ import annotations
 
+import fcntl
 import re
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -29,6 +31,7 @@ from typing import Iterable
 from jsonstore import atomic_write_json, load_json
 
 DESC_PATH = Path("/data/.ipa_descriptions.json")
+DESC_LOCK = Path("/data/.ipa_descriptions.lock")
 MAX_RAW = 1500
 MAX_HIGHLIGHTS = 6
 MAX_HIGHLIGHT_LEN = 80
@@ -119,6 +122,25 @@ def _save(data: dict) -> None:
     atomic_write_json(DESC_PATH, data)
 
 
+@contextmanager
+def _locked():
+    """Serialize read-modify-write across scanner, WebUI and concurrent downloads."""
+    try:
+        DESC_LOCK.parent.mkdir(parents=True, exist_ok=True)
+        handle = DESC_LOCK.open("a+")
+    except OSError:
+        yield
+        return
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
+
+
 def _clean_line(line: str) -> str:
     s = _strip_markdown(line or "").strip()
     # 去掉行首项目符号 / emoji 装饰
@@ -199,24 +221,25 @@ def remember_from_message(filename: str, message_text: str, source: str = "") ->
     """在 TG 下载入库时调用。如果用户已经手动编辑过，则不覆盖。"""
     if not filename:
         return {}
-    data = _load()
-    existing = data.get(filename) or {}
-    if existing.get("manual"):
-        return existing
-    highlights = extract_highlights(message_text or "")
-    raw_text = (message_text or "").strip()
-    if len(raw_text) > MAX_RAW:
-        raw_text = raw_text[: MAX_RAW - 1] + "…"
-    record = {
-        "highlights": highlights,
-        "raw_text": raw_text,
-        "source": source or existing.get("source", ""),
-        "saved_at": datetime.now().replace(microsecond=0).isoformat(),
-        "manual": False,
-    }
-    data[filename] = record
-    _save(data)
-    return record
+    with _locked():
+        data = _load()
+        existing = data.get(filename) or {}
+        if existing.get("manual"):
+            return existing
+        highlights = extract_highlights(message_text or "")
+        raw_text = (message_text or "").strip()
+        if len(raw_text) > MAX_RAW:
+            raw_text = raw_text[: MAX_RAW - 1] + "…"
+        record = {
+            "highlights": highlights,
+            "raw_text": raw_text,
+            "source": source or existing.get("source", ""),
+            "saved_at": datetime.now().replace(microsecond=0).isoformat(),
+            "manual": False,
+        }
+        data[filename] = record
+        _save(data)
+        return record
 
 
 def set_manual(filename: str, highlights: Iterable[str], raw_text: str = "") -> dict:
@@ -232,36 +255,39 @@ def set_manual(filename: str, highlights: Iterable[str], raw_text: str = "") -> 
         cleaned.append(s)
         if len(cleaned) >= MAX_HIGHLIGHTS:
             break
-    data = _load()
-    record = {
-        "highlights": cleaned,
-        "raw_text": (raw_text or "")[:MAX_RAW],
-        "source": (data.get(filename) or {}).get("source", ""),
-        "saved_at": datetime.now().replace(microsecond=0).isoformat(),
-        "manual": True,
-    }
-    data[filename] = record
-    _save(data)
-    return record
+    with _locked():
+        data = _load()
+        record = {
+            "highlights": cleaned,
+            "raw_text": (raw_text or "")[:MAX_RAW],
+            "source": (data.get(filename) or {}).get("source", ""),
+            "saved_at": datetime.now().replace(microsecond=0).isoformat(),
+            "manual": True,
+        }
+        data[filename] = record
+        _save(data)
+        return record
 
 
 def reset(filename: str) -> bool:
     """清掉 manual 标记，让下次 TG 入库重新覆盖。返回是否真的有记录被改。"""
-    data = _load()
-    if filename not in data:
-        return False
-    data[filename]["manual"] = False
-    _save(data)
-    return True
+    with _locked():
+        data = _load()
+        if filename not in data:
+            return False
+        data[filename]["manual"] = False
+        _save(data)
+        return True
 
 
 def prune(known_filenames: Iterable[str]) -> int:
     keep = set(known_filenames)
-    data = _load()
-    removed = [k for k in list(data.keys()) if k not in keep]
-    if not removed:
-        return 0
-    for k in removed:
-        data.pop(k, None)
-    _save(data)
-    return len(removed)
+    with _locked():
+        data = _load()
+        removed = [k for k in list(data.keys()) if k not in keep]
+        if not removed:
+            return 0
+        for k in removed:
+            data.pop(k, None)
+        _save(data)
+        return len(removed)

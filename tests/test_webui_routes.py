@@ -44,6 +44,7 @@ class WebuiRouteTests(unittest.TestCase):
         data = response.get_json()
         for key in (
             "last_scan_status",
+            "last_scan_errors",
             "last_scan_age_seconds",
             "last_scan_error",
             "session_present",

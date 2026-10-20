@@ -42,7 +42,8 @@ cp .env.example .env
 | `TG_DOWNLOAD_STALL_TIMEOUT` | 否 | 连续无下载进度多久后重试（默认 180 秒） |
 | `TG_DOWNLOAD_ATTEMPTS` | 否 | 单文件最多尝试次数（默认 2） |
 | `TG_DOWNLOAD_REQUEST_SIZE` | 否 | 单次 getFile 请求字节数（默认 1048576，慢代理可降到 524288） |
-| `TG_MAX_CONCURRENT` | 否 | 同时下载数（默认 1） |
+| `TG_MAX_CONCURRENT` | 否 | 同时下载数（默认 1；代理有余量可试 2） |
+| `TG_DEDUPE_PENDING` | 否 | 同一轮内同版本/同路径只排队一个下载（默认 1） |
 | `TZ` | 否 | 时区（默认 `Asia/Shanghai`） |
 
 如需自定义宿主机端口或 IPA/图标目录路径：

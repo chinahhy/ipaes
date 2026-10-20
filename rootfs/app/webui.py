@@ -1392,6 +1392,7 @@ def api_status():
         "last_scan": state.get("last_scan") or "",
         "last_scan_age_seconds": _age_seconds(state.get("last_scan")),
         "last_scan_status": scan_status,
+        "last_scan_errors": int(state.get("last_scan_errors") or 0),
         "last_scan_error": str(state.get("last_scan_error") or "")[:300],
         "last_scan_attempt": state.get("last_scan_attempt") or "",
         "scan_stale": scan_status == "running" and (attempt_age or 0) > 12 * 3600,

@@ -2515,7 +2515,10 @@ function ipaApp() {
       const age = s.last_scan_age_seconds;
       const when = (age == null) ? '还没有扫描记录' : this.formatAge(age);
       if (s.last_scan_status === 'error') return '上次扫描失败 · ' + when;
-      if (s.last_scan_status === 'ok') return '上次扫描成功 · ' + when;
+      if (s.last_scan_status === 'ok') {
+        const errs = Number(s.last_scan_errors) || 0;
+        return '上次扫描完成 · ' + when + (errs ? ' · ' + errs + ' 个异常' : '');
+      }
       return when;
     },
 
@@ -2524,6 +2527,7 @@ function ipaApp() {
       return s.session_present === false
         || s.scan_stale === true
         || s.last_scan_status === 'error'
+        || (Number(s.last_scan_errors) || 0) > 0
         || (typeof s.last_scan_age_seconds === 'number' && s.last_scan_age_seconds > 26 * 3600);
     },
 

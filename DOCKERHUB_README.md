@@ -65,6 +65,7 @@ services:
       - TG_DOWNLOAD_ATTEMPTS=${TG_DOWNLOAD_ATTEMPTS:-2}
       - TG_DOWNLOAD_REQUEST_SIZE=${TG_DOWNLOAD_REQUEST_SIZE:-1048576}
       - TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}
+      - TG_DEDUPE_PENDING=${TG_DEDUPE_PENDING:-1}
       - TZ=${TZ:-Asia/Shanghai}
 ```
 
@@ -84,6 +85,7 @@ services:
 | `TG_DOWNLOAD_ATTEMPTS` | 单文件最多尝试次数 | `2` |
 | `TG_DOWNLOAD_REQUEST_SIZE` | 单次 getFile 请求字节数 | `1048576` |
 | `TG_MAX_CONCURRENT` | 同时下载数 | `1` |
+| `TG_DEDUPE_PENDING` | 同一轮内同版本/同路径去重 | `1` |
 | `TZ` | 容器时区 | `Asia/Shanghai` |
 | `HOST_PORT_NGINX` | 订阅源宿主端口 | `8080` |
 | `HOST_PORT_WEBUI` | WebUI 宿主端口 | `8085` |
