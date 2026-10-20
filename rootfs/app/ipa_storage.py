@@ -57,7 +57,12 @@ def identity(path):
             if not names:
                 return {}
             info = plistlib.loads(z.read(names[0]))
-        return {'name': info.get('CFBundleDisplayName') or info.get('CFBundleName'), 'bundleIdentifier': info.get('CFBundleIdentifier')}
+        return {
+            'name': info.get('CFBundleDisplayName') or info.get('CFBundleName'),
+            'bundleIdentifier': info.get('CFBundleIdentifier'),
+            'version': str(info.get('CFBundleShortVersionString') or info.get('CFBundleVersion') or ''),
+            'build': str(info.get('CFBundleVersion') or ''),
+        }
     except (OSError, ValueError, zipfile.BadZipFile, plistlib.InvalidFileException):
         return {}
 

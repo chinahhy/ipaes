@@ -38,7 +38,7 @@ def _load_resolver():
 
 def _load_app_entry_builder(base_url, icons_dir):
     tree = _scanner_tree()
-    names = {"with_access_token", "build_app_entry"}
+    names = {"build_app_entry"}
     selected: list[ast.stmt] = [
         node
         for node in tree.body

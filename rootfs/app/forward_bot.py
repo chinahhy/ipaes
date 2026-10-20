@@ -18,6 +18,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_matcher import display_app_name, filename_app_name, match_whitelist
+from ipa_retention import is_protected, is_protected_path
 from ipa_storage import download_path, iter_ipas, store_ipa
 from tg_session_lock import SessionBusy, acquire_session_lock
 
@@ -754,6 +755,19 @@ async def handle_callback(bot: TGClient, cb_id: str, chat_id: int, msg_id: int, 
     deleted = []
     if action == "replace":
         new_key = extract_version_key(filename)
+        protected_matches = [
+            old_f for old_f in sorted(iter_ipas(IPA_DIR))
+            if (old_f.name == filename or extract_version_key(old_f.name) == new_key)
+            and (is_protected(old_f.name) or is_protected_path(old_f))
+        ]
+        if protected_matches:
+            log.warning("拒绝替换受保护文件: %s", [p.name for p in protected_matches])
+            await bot.edit_message_text(
+                chat_id, msg_id,
+                "🔒 这个版本的文件受保护，禁止替换或删除。\n\n"
+                f"文件：`{protected_matches[0].name}`",
+            )
+            return
         for old_f in sorted(iter_ipas(IPA_DIR)):
             if old_f.name == filename:
                 old_f.unlink()

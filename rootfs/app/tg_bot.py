@@ -11,7 +11,7 @@ Telegram IPA Scanner - cron 触发，按白名单下载IPA
   TG_DOWNLOAD_STALL_TIMEOUT - 单个媒体块无响应的超时秒数（默认180）
   TG_DOWNLOAD_ATTEMPTS - 单文件续传尝试次数（默认2）
 """
-import asyncio, json, logging, os, random, re, sys, zipfile
+import asyncio, json, logging, os, re, sys, zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse, urlunparse
@@ -26,6 +26,8 @@ from telethon.tl.types import DocumentAttributeFilename
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_matcher import display_app_name, match_whitelist
+from ipa_retention import safe_unlink
+from jsonstore import atomic_write_json, load_json
 from tg_download import DownloadCancellationFailed, download_media_resumable
 from tg_session_lock import SessionBusy, acquire_session_lock
 from ipa_storage import download_path, store_ipa
@@ -124,10 +126,11 @@ PROXY_URL = load_proxy_url()
 PROXY = parse_proxy(PROXY_URL)
 SCAN_HOURS = int(os.environ.get("TG_SCAN_HOURS", "25"))
 SCAN_LIMIT = int(os.environ.get("TG_SCAN_LIMIT", "500"))
-DOWNLOAD_TIMEOUT = int(os.environ.get("TG_DOWNLOAD_TIMEOUT", "1800"))  # 单文件下载超时（秒），默认30分钟
+DOWNLOAD_TIMEOUT = int(os.environ.get("TG_DOWNLOAD_TIMEOUT", "3600"))  # 单文件下载超时（秒）
 DOWNLOAD_STALL_TIMEOUT = env_int("TG_DOWNLOAD_STALL_TIMEOUT", 180)
 DOWNLOAD_ATTEMPTS = env_int("TG_DOWNLOAD_ATTEMPTS", 2)
-MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("TG_MAX_CONCURRENT", "3"))  # 最大并发下载数
+DOWNLOAD_REQUEST_SIZE = env_int("TG_DOWNLOAD_REQUEST_SIZE", 1024 * 1024)
+MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("TG_MAX_CONCURRENT", "1"))  # 最大并发下载数
 NOTIFY_TIMEOUT = env_int("TG_NOTIFY_TIMEOUT", 30)
 NOTIFY_RETRIES = env_int("TG_NOTIFY_RETRIES", 3)
 NOTIFY_RETRY_DELAY = env_int("TG_NOTIFY_RETRY_DELAY", 8)
@@ -386,15 +389,36 @@ async def send_scan_notification(config, all_results, total_ipa, total_dl, total
     for chat_id in bot["chat_ids"]:
         await send_bot_message_with_retry(bot["token"], chat_id, text)
 
+def _default_state():
+    return {
+        "downloaded_files": [],
+        "downloaded_versions": {},
+        "download_events": [],
+        "last_scan": None,
+        "last_scan_status": "unknown",
+        "last_scan_error": "",
+        "last_scan_attempt": None,
+    }
+
+
 def load_state():
-    if not STATE_PATH.exists():
-        return {"downloaded_files": [], "downloaded_versions": {}, "last_scan": None}
-    with open(STATE_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    state = load_json(STATE_PATH, None)
+    if not isinstance(state, dict):
+        if STATE_PATH.exists():
+            log.warning("state.json 无法解析，按空状态继续（不会删除原文件）")
+        return _default_state()
+    state.setdefault("downloaded_files", [])
+    state.setdefault("downloaded_versions", {})
+    state.setdefault("download_events", [])
+    state.setdefault("last_scan", None)
+    state.setdefault("last_scan_status", "unknown")
+    state.setdefault("last_scan_error", "")
+    state.setdefault("last_scan_attempt", None)
+    return state
+
 
 def save_state(state):
-    with open(STATE_PATH, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+    atomic_write_json(STATE_PATH, state)
 
 def extract_version_key(filename):
     name = filename.rsplit(".", 1)[0] if "." in filename else filename
@@ -483,7 +507,8 @@ def validate_existing_ipa(path, expected_size):
 
 
 async def scan_group(client, group_link, hours_back, whitelist, state,
-                     rate_limit, priority_versions, priority_groups):
+                     rate_limit, priority_versions, priority_groups,
+                     download_budget=None):
     """扫描群组，收集待下载 IPA 列表（不下载，下载由 main 统一并发执行）。"""
     result = {"group": group_link, "total_msgs": 0, "ipa_found": 0,
               "downloaded": [], "skipped": 0, "errors": [], "version_keys": set(),
@@ -502,9 +527,12 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
     log.info(f"扫描群 [{group_title}]，回溯{hours_back}小时")
 
     downloaded_set = set(state["downloaded_files"])
-    today_str = datetime.now().strftime("%Y%m%d")
-    today_count = sum(1 for f in state["downloaded_files"] if f.startswith(today_str))
     is_priority = group_link in priority_groups
+    if download_budget is None:
+        download_budget = {
+            "used": 0,
+            "max": int(rate_limit.get("max_per_day", 50)),
+        }
 
     # 同一 album 内的 caption 解析做一次缓存，避免对每个 IPA 都打一次额外
     # 的 get_messages。grouped_id 为 None 时不缓存。
@@ -557,10 +585,11 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
                 result["already_present"] += 1
                 continue
             log.warning(f"  删除残缺文件后重下: {filename} ({reason})")
-            try:
-                save_path.unlink()
-            except OSError:
-                pass
+            if not safe_unlink(save_path):
+                log.warning(f"  受保护文件校验失败，保留不动: {filename}")
+                result["skipped"] += 1
+                result["errors"].append(f"{filename}: 受保护文件校验失败，未重下")
+                continue
         else:
             archive_dir = save_path.parent / ".archive"
             archived_candidates = [archive_dir / save_path.name]
@@ -581,8 +610,8 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
             log.info(f"  跳过（优先群已有同版本）: {filename}")
             result["skipped"] += 1; continue
 
-        if today_count >= rate_limit["max_per_day"]:
-            log.warning(f"  已达今日上限{rate_limit['max_per_day']}")
+        if download_budget["used"] >= download_budget["max"]:
+            log.warning(f"  已达每日下载上限{download_budget['max']}")
             break
 
         # 收集到待下载列表，不在这里下载
@@ -603,7 +632,7 @@ async def scan_group(client, group_link, hours_back, whitelist, state,
     return result
 
 
-async def download_one(client, item, state, semaphore, stop_event):
+async def download_one(client, item, state, semaphore, stop_event, download_budget=None):
     """并发下载单个 IPA。
 
     FloodWait/PeerFlood → 设置 stop_event 阻止后续下载并 raise（由 main 捕获）。
@@ -620,6 +649,10 @@ async def download_one(client, item, state, semaphore, stop_event):
         part_path = item["part_path"]
         save_path = item["save_path"]
 
+        if download_budget is not None and download_budget["used"] >= download_budget["max"]:
+            log.warning(f"  已达每日下载上限{download_budget['max']}，跳过: {filename}")
+            return {"status": "skipped", "item": item}
+
         # 并发场景下可能另一个任务刚下完同名文件
         if save_path.exists():
             ok, _ = validate_existing_ipa(save_path, item["size"])
@@ -633,6 +666,7 @@ async def download_one(client, item, state, semaphore, stop_event):
                 await download_media_resumable(
                     client, item["message"], part_path, item["size"],
                     DOWNLOAD_TIMEOUT, DOWNLOAD_STALL_TIMEOUT,
+                    request_size=DOWNLOAD_REQUEST_SIZE,
                 )
                 ok, reason = validate_ipa(part_path, item["size"])
                 if not ok:
@@ -689,6 +723,11 @@ async def download_one(client, item, state, semaphore, stop_event):
             if unique_key not in state["downloaded_files"]:
                 state["downloaded_files"].append(unique_key)
             state.setdefault("downloaded_versions", {})[item["ver_key"]] = item["group_link"]
+            state.setdefault("download_events", []).append(
+                datetime.now().isoformat(timespec="seconds")
+            )
+            if download_budget is not None:
+                download_budget["used"] += 1
 
             # 记录"破解点 / 版本说明"
             try:
@@ -706,6 +745,57 @@ async def download_one(client, item, state, semaphore, stop_event):
             return {"status": "error", "item": item, "error": str(e)}
 
 
+def _scan_error_result(group, error):
+    """Keep a failed group visible to the summary instead of silently dropping it."""
+    return {
+        "group": group,
+        "total_msgs": 0,
+        "ipa_found": 0,
+        "downloaded": [],
+        "skipped": 0,
+        "errors": [error],
+        "version_keys": set(),
+        "pending": [],
+        "matched": 0,
+        "already_present": 0,
+    }
+
+
+def _update_scan_state(**fields):
+    try:
+        state = load_state()
+        state.update(fields)
+        save_state(state)
+    except Exception as exc:
+        log.warning("更新扫描状态失败: %r", exc)
+
+
+async def send_failure_notification(error):
+    """Best-effort alert when the scan cannot reach its normal summary path."""
+    try:
+        config = load_config()
+    except Exception as exc:
+        log.error("无法读取配置，跳过失败通知: %r", exc)
+        return
+    bot = notification_bot_config(config)
+    if not bot["enabled"] or not bot["chat_ids"]:
+        log.warning("未配置 Bot 通知，扫描失败仅写入日志")
+        return
+    text = "\n".join([
+        "⚠️ IPAes 扫描未完成",
+        f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        f"原因：{str(error or '未知错误')[:300]}",
+        "详情：/logs/tg-runtime.log 与 /logs/tg-cron.log",
+        "容器本身仍在运行，下一轮定时扫描会继续。",
+    ])
+    write_notification_snapshot(
+        FAILED_NOTIFICATION_PATH, text, header="scan_failure"
+    )
+    for chat_id in bot["chat_ids"]:
+        await send_bot_message_with_retry(bot["token"], chat_id, text)
+
+
 async def main():
     config = load_config()
     state = load_state()
@@ -718,9 +808,19 @@ async def main():
     })
     priority_groups = config.get("priority_groups", [])
 
+    today = datetime.now().date().isoformat()
+    cutoff = (datetime.now() - timedelta(days=7)).date().isoformat()
+    events = [str(e) for e in state.get("download_events", []) if str(e)[:10] >= cutoff]
+    state["download_events"] = events
+    download_budget = {
+        "used": sum(1 for event in events if event[:10] == today),
+        "max": max(1, int(rate_limit.get("max_per_day", 50))),
+    }
+
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True) if not DOWNLOAD_DIR.exists() else None
     log.info("=" * 60)
     log.info(f"TG扫描开始，回溯{SCAN_HOURS}小时，每群最多{SCAN_LIMIT}条消息")
+    log.info(f"今日下载预算: {download_budget['used']}/{download_budget['max']}")
     if PROXY_URL:
         log.info(f"代理URL: {redact_proxy_url(PROXY_URL)}")
         log.info(f"代理解析: {PROXY or '无效，按直连处理'}")
@@ -757,7 +857,7 @@ async def main():
             try:
                 result = await scan_group(client, group, SCAN_HOURS, whitelist,
                                           state, rate_limit, priority_versions,
-                                          priority_groups)
+                                          priority_groups, download_budget)
                 all_results.append(result)
                 if group in priority_groups:
                     for vk in result.get("version_keys", set()):
@@ -767,10 +867,15 @@ async def main():
                 for vk in result.get("version_keys", set()):
                     state.setdefault("downloaded_versions", {})[vk] = group
                 save_state(state)
-            except (FloodWaitError, PeerFloodError):
-                log.error("风控触发，提前结束扫描"); break
+            except (FloodWaitError, PeerFloodError) as e:
+                log.error("风控触发，提前结束扫描: %r", e)
+                all_results.append(_scan_error_result(group, f"风控停机: {e}"))
+                break
             except Exception as e:
                 log.error(f"扫描{group}异常: {e}")
+                all_results.append(
+                    _scan_error_result(group, f"扫描异常: {type(e).__name__}: {e}")
+                )
 
         # ---- 并发下载阶段 ----
         all_pending = []
@@ -782,7 +887,9 @@ async def main():
             semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
             stop_event = asyncio.Event()
             download_tasks = [
-                asyncio.create_task(download_one(client, item, state, semaphore, stop_event))
+                asyncio.create_task(download_one(
+                    client, item, state, semaphore, stop_event, download_budget
+                ))
                 for item in all_pending
             ]
             download_results = await asyncio.gather(*download_tasks, return_exceptions=True)
@@ -824,9 +931,6 @@ async def main():
         log.info(f"📊 总结: 发现{total_ipa}个IPA, 下载{total_dl}个, 跳过{total_skipped}个")
         await send_scan_notification(config, all_results, total_ipa, total_dl, total_skipped)
 
-        state["last_scan"] = datetime.now().isoformat()
-        save_state(state)
-
     finally:
         try:
             await client.disconnect()
@@ -845,8 +949,23 @@ def run_scan():
     with lease:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        _update_scan_state(
+            last_scan_attempt=datetime.now().isoformat(timespec="seconds"),
+            last_scan_status="running",
+            last_scan_error="",
+        )
+        status = "ok"
+        error = ""
         try:
             loop.run_until_complete(main())
+        except SystemExit as exc:
+            status = "error"
+            error = f"扫描进程提前退出（code={exc.code}）"
+            log.error(error)
+        except Exception as exc:
+            status = "error"
+            error = f"{type(exc).__name__}: {exc}"
+            log.exception("扫描异常退出")
         finally:
             pending = asyncio.all_tasks(loop)
             for task in pending:
@@ -855,8 +974,30 @@ def run_scan():
                 _, still_pending = loop.run_until_complete(asyncio.wait(pending, timeout=10))
                 if still_pending:
                     log.warning("Telethon 退出时仍有 %d 个后台任务，关闭事件循环", len(still_pending))
-            loop.close()
-            asyncio.set_event_loop(None)
+
+        if status != "ok":
+            try:
+                loop.run_until_complete(send_failure_notification(error))
+            except Exception as exc:
+                log.warning("发送扫描失败通知失败: %r", exc)
+
+        loop.close()
+        asyncio.set_event_loop(None)
+
+        now = datetime.now().isoformat(timespec="seconds")
+        if status == "ok":
+            _update_scan_state(
+                last_scan=now,
+                last_scan_attempt=now,
+                last_scan_status="ok",
+                last_scan_error="",
+            )
+        else:
+            _update_scan_state(
+                last_scan_attempt=now,
+                last_scan_status="error",
+                last_scan_error=error[:500],
+            )
 
 
 if __name__ == "__main__":

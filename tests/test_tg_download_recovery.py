@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -174,7 +175,7 @@ class DownloadWatchdogTests(unittest.IsolatedAsyncioTestCase):
         )
         calls = []
 
-        async def flaky_download(_client, _message, path, _size, _timeout, _stall):
+        async def flaky_download(_client, _message, path, _size, _timeout, _stall, **_kwargs):
             calls.append(path)
             if len(calls) == 1:
                 path.write_bytes(b"par")
@@ -200,7 +201,9 @@ class DownloadWatchdogTests(unittest.IsolatedAsyncioTestCase):
             "DOWNLOAD_ATTEMPTS": 2,
             "DOWNLOAD_TIMEOUT": 3600,
             "DOWNLOAD_STALL_TIMEOUT": 180,
+            "DOWNLOAD_REQUEST_SIZE": 1024 * 1024,
             "MAX_CONCURRENT_DOWNLOADS": 1,
+            "datetime": datetime,
             "download_media_resumable": flaky_download,
             "validate_ipa": lambda path, size: (path.read_bytes() == b"valid", "bad"),
             "validate_existing_ipa": lambda path, size: (path.read_bytes() == b"valid", "bad"),

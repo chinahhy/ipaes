@@ -31,7 +31,7 @@ echo "==== TG scan triggered at $(date '+%Y-%m-%d %H:%M:%S') ====" >> "$LOG"
 if [ ! -f /session/tg-ipa-bot.session ]; then
     echo "❌ Session 未登录，跳过本次扫描" >> "$LOG"
     echo "   请运行: docker exec -it ipaes /app/tg-login.sh" >> "$LOG"
-    exit 0
+    exit 3
 fi
 
 # 跑 TG 扫描：
@@ -39,6 +39,7 @@ fi
 # - 第三方库/解释器 stderr 单独进 runtime 日志，避免污染人看的扫描摘要。
 # 最后一道保险：即使 Telegram 客户端在收尾阶段卡住，也必须在下次
 # 定时扫描前释放进程和 session。业务层的单文件超时仍由 tg_bot.py 控制。
+status=0
 if TG_LOG_PATH="$LOG" timeout --signal=TERM --kill-after=15s 39600s /usr/bin/python3 /app/tg_bot.py >> "$RUNTIME_LOG" 2>&1; then
     :
 else
@@ -53,3 +54,4 @@ fi
 shrink_log_if_needed "$LOG"
 shrink_log_if_needed "$RUNTIME_LOG"
 echo "==== TG scan done at $(date '+%Y-%m-%d %H:%M:%S') ====" >> "$LOG"
+exit "$status"

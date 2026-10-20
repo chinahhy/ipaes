@@ -6,6 +6,10 @@ from pathlib import Path
 
 
 CHUNK_SIZE = 512 * 1024
+# Telegram accepts up to 1 MiB per getFile request.  Larger requests cut the
+# number of round trips on high-latency proxies while CHUNK_SIZE stays the
+# resume granularity written to disk.
+MAX_REQUEST_SIZE = 1024 * 1024
 
 
 class DownloadStalled(TimeoutError):
@@ -25,9 +29,19 @@ def premium_wait_seconds(error):
 
 
 async def download_media_resumable(client, message, path: Path, expected_size,
-                                   timeout, stall_timeout):
-    """Write complete 512 KiB chunks and restart at the last complete chunk."""
+                                   timeout, stall_timeout,
+                                   request_size=MAX_REQUEST_SIZE):
+    """Write complete 512 KiB chunks and restart at the last complete chunk.
+
+    ``request_size`` controls the network read size (up to Telegram's 1 MiB
+    limit); ``CHUNK_SIZE`` remains the on-disk resume alignment.
+    """
     path = Path(path)
+    try:
+        request_size = int(request_size)
+    except (TypeError, ValueError):
+        request_size = MAX_REQUEST_SIZE
+    request_size = max(CHUNK_SIZE, min(request_size, MAX_REQUEST_SIZE))
     current = path.stat().st_size if path.exists() else 0
     if current > expected_size:
         with path.open("r+b") as output:
@@ -43,7 +57,7 @@ async def download_media_resumable(client, message, path: Path, expected_size,
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     stream = client.iter_download(
-        message, offset=current, request_size=CHUNK_SIZE,
+        message, offset=current, request_size=request_size,
         chunk_size=CHUNK_SIZE, file_size=expected_size,
     )
     try:

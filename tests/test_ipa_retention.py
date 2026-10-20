@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "rootfs" / "app"))
 
-from ipa_retention import archive_ipa, select_versions
+from ipa_retention import archive_ipa, is_protected, safe_unlink, select_versions
 
 
 def meta(bundle, version, filename=None, mtime=1):
@@ -50,6 +50,40 @@ class IpaRetentionTests(unittest.TestCase):
         active, older = select_versions(files, limit=3)
         self.assertEqual({m["version"] for m in active}, {"4", "5", "6"})
         self.assertEqual(len(older), 3)
+
+    def test_protected_identity_survives_rename(self):
+        protected = meta("com.atebits.Tweetie2", "10.76", "renamed_archive.ipa")
+        files = [protected] + [
+            meta("com.atebits.Tweetie2", v) for v in ("12.1", "12.2", "12.3", "12.4", "12.5")
+        ]
+        active, older = select_versions(files)
+        self.assertIn(protected, active)
+        self.assertEqual(len(active), 5)
+
+    def test_safe_unlink_refuses_protected_filename_and_deletes_normal_file(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as temp:
+            protected = Path(temp) / "X_10.76_证书安装登录版本.ipa"
+            normal = Path(temp) / "Other_1.0.ipa"
+            protected.write_bytes(b"not-a-zip")
+            normal.write_bytes(b"not-a-zip")
+            self.assertFalse(safe_unlink(protected))
+            self.assertTrue(protected.exists())
+            self.assertTrue(safe_unlink(normal))
+            self.assertFalse(normal.exists())
+
+    def test_archive_refuses_protected_filename(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as temp:
+            path = Path(temp) / "X_10.76_证书安装登录版本.ipa"
+            path.write_bytes(b"not-a-zip")
+            with self.assertRaises(OSError):
+                archive_ipa(Path(temp), path.name)
+            self.assertTrue(path.exists())
+
+    def test_identity_helper_flags_bundle_and_version(self):
+        self.assertTrue(is_protected(None, "com.atebits.Tweetie2", "10.76", "14"))
+        self.assertTrue(is_protected(None, "com.atebits.Tweetie2", "10.76.0", "14"))
+        self.assertFalse(is_protected(None, "com.atebits.Tweetie2", "12.35", "14"))
+        self.assertFalse(is_protected(None, "com.example.app", "10.76", "14"))
 
     def test_archive_never_overwrites_an_older_archive(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as temp:

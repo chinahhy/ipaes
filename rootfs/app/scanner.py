@@ -10,7 +10,7 @@ IPA仓库自动扫描器（AltStore/Esign兼容格式）
   REPO_PATH      - URL路径部分（默认从BASE_URL提取）
 """
 
-import os, sys, json, zipfile, plistlib, shutil, struct, zlib, io, binascii, fcntl, tempfile
+import os, sys, json, zipfile, plistlib, shutil, struct, zlib, io, binascii, fcntl
 from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse, quote
@@ -18,18 +18,12 @@ from urllib.parse import urlparse, quote
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
 from ipa_retention import archive_ipa, select_versions
-from ipa_storage import iter_ipas, resolve_ipa, store_ipa
+from ipa_storage import iter_ipas, store_ipa
+from jsonstore import atomic_write_json
 
-# 客户端解锁码（Esign / 全能签 UI 锁）：
-# - apps[].isNeedlock=1 → 客户端默认显示“解锁”按钮，点击后弹解锁码输入框
-# - news.isUnlock=1 + news.url 指向 /auth → 客户端把 udid+code POST 到 /auth 校验
-# - news.key 是服务端用来生成解锁凭证的密钥（仅 UI 锁，非真实下载鉴权）
-LOCK_AUTH_KEY = os.environ.get("IPA_LOCK_AUTH_KEY", "hoya_ipa_lock_v1")
 # 历史遗留：以前 IPA 直链带 ?token= 做 nginx 层鉴权。现在订阅链接公开分享，
-# 下载 URL 不再附 token，nginx 也不再拦截。订阅根路径 /<REPO_PATH>/ 仍是随机
+# 下载 URL 不再附 token，nginx 也不再拦截；订阅根路径 /<REPO_PATH>/ 仍是随机
 # 字符串，防止陌生扫描器拉到 repo.json。
-def with_access_token(url: str) -> str:
-    return url
 
 # ===== 配置（全部来自环境变量）=====
 def resolve_base_url(env_url=None, applied_path=None):
@@ -63,10 +57,6 @@ REPO_IDENTIFIER = os.environ.get("REPO_IDENTIFIER", "com.private.ipa.repo")
 
 # 解锁码（unlock.json.code）不再参与 URL 路径生成，URL 与解锁码彻底解耦。
 # REPO_BASE_URL 现在直接就是对外发布的订阅前缀（可以是 https://domain 或 https://domain/segment）。
-_parsed = urlparse(BASE_URL.rstrip("/"))
-_path_parts = [p for p in _parsed.path.split("/") if p]
-REPO_DIR_NAME = _path_parts[-1] if _path_parts else "repo"
-
 DATA_DIR = Path("/data")
 IPA_DIR = DATA_DIR / "ipa"
 ICONS_DIR = DATA_DIR / "icons"
@@ -77,28 +67,12 @@ SCAN_LOCK = DATA_DIR / ".scanner.lock"
 ICON_EXTRACTOR_VERSION = "cgbi-v5-native-icon-priority"
 # ================
 
-def atomic_write_json(path: Path, value: dict):
-    """Publish complete JSON in one rename so readers never see a partial file."""
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent,
-            prefix=f".{path.name}.", delete=False,
-        ) as output:
-            temporary = Path(output.name)
-            json.dump(value, output, indent=2, ensure_ascii=False)
-            output.flush()
-            os.fsync(output.fileno())
-        os.chmod(temporary, 0o644)
-        os.replace(temporary, path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
-
 def load_cache():
     if CACHE_DB.exists():
-        try: return json.loads(CACHE_DB.read_text())
-        except: return {}
+        try:
+            return json.loads(CACHE_DB.read_text())
+        except (OSError, ValueError):
+            return {}
     return {}
 
 def save_cache(cache):
@@ -341,14 +315,8 @@ def _normalize_png(path):
         if not _standard_png_ok(raw):
             raise ValueError("invalid PNG icon")
         return True
-    except (OSError, struct.error, zlib.error, binascii.Error):
-        # CgBI conversion or file write failed -- remove partial file
-        try:
-            os.remove(path)
-        except OSError:
-            pass
-        return False
     except Exception:
+        # CgBI conversion or file write failed -- remove the partial icon.
         try:
             os.remove(path)
         except OSError:
@@ -383,8 +351,10 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
 
     app_prefix = f"Payload/{app_dir}/"
     candidates = []
+    archive_names = zf.namelist()
+    archive_name_set = set(archive_names)
 
-    for name in zf.namelist():
+    for name in archive_names:
         if not name.startswith(app_prefix): continue
         lower = name.lower()
         if not lower.endswith(".png"): continue
@@ -412,7 +382,7 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
         f"{app_prefix}Frameworks/App.framework/flutter_assets/AppIcon.png",
     ]
     for fpath in flutter_paths:
-        if fpath in zf.namelist():
+        if fpath in archive_name_set:
             try:
                 size = zf.getinfo(fpath).file_size
                 candidates.append((5, -size, fpath))
@@ -425,7 +395,7 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
     # 并按尺寸取最大，避免漏掉 Flutter / RN / Cordova 等框架的非标准图标位置。
     deep_keywords = ("logo", "icon", "applogo", "app_logo", "appicon")
     seen_deep = set()
-    for name in zf.namelist():
+    for name in archive_names:
         if not name.startswith(app_prefix):
             continue
         lower = name.lower()
@@ -462,7 +432,7 @@ def extract_largest_icon(zf, app_dir, plist, out_path):
 
     # iTunesArtwork (no .png extension) -- highest priority, fallback
     for art_name in (f"{app_prefix}iTunesArtwork", "iTunesArtwork"):
-        if art_name in zf.namelist():
+        if art_name in archive_name_set:
             try:
                 size = zf.getinfo(art_name).file_size
                 candidates.append((0, -size, art_name))
@@ -494,6 +464,7 @@ def parse_ipa(ipa_path: Path):
 
             bundle_id = plist.get("CFBundleIdentifier", "unknown.bundle.id")
             version = str(plist.get("CFBundleShortVersionString") or plist.get("CFBundleVersion", "1.0"))
+            build = str(plist.get("CFBundleVersion") or "")
             app_name = plist.get("CFBundleDisplayName") or plist.get("CFBundleName") or app_dir.replace(".app", "")
             min_ios = str(plist.get("MinimumOSVersion", "12.0"))
 
@@ -515,6 +486,7 @@ def parse_ipa(ipa_path: Path):
 
             return {
                 "name": app_name, "bundleIdentifier": bundle_id, "version": version,
+                "build": build,
                 "size": ipa_path.stat().st_size, "minOSVersion": min_ios,
                 "ipa_filename": ipa_path.name, "icon_filename": icon_filename if icon_ok else None,
                 "mtime": ipa_path.stat().st_mtime,
@@ -534,7 +506,7 @@ def cached_meta_usable(meta: dict) -> bool:
         return False
 
 def build_app_entry(meta: dict) -> dict:
-    ipa_url = with_access_token(f"{BASE_URL}/ipa/{quote(meta['ipa_filename'])}")
+    ipa_url = f"{BASE_URL}/ipa/{quote(meta['ipa_filename'])}"
     # 版本号绑定到图标文件本身的 mtime + size，这样图标重新提取后 URL 一定变化，
     # 避免客户端（轻松签 / 全能签）按 URL 缓存旧的占位图。
     icon_url = ""
@@ -549,9 +521,7 @@ def build_app_entry(meta: dict) -> dict:
     date_str = iso_date(meta["mtime"])
     # 严格按魔力签/全能签源协议组织字段顺序：
     # name → versionDate → version → iconURL → downloadURL → size → isNeedlock → appType → localizedDescription
-    # size 在魔力签规范里是字符串（如 "58M"），不是字节数；这里转成 MB 字符串。
-    size_mb = max(1, round(meta["size"] / (1024 * 1024)))
-    size_str = f"{size_mb}M"
+    # size 使用字节数（字符串）；客户端负责格式化为 MB/GB。
     # 版本说明：优先用 TG 消息提取出的"破解点高亮"。
     # 没有的话退回"App 名 vX.Y.Z"作为兜底。
     desc_record = ipa_desc.get(meta["ipa_filename"]) or {}
@@ -670,21 +640,36 @@ def _scan_unlocked():
     }
     atomic_write_json(REPO_JSON.parent / "_altstore.json", altstore_repo)
 
+    # 一次扫描内按文件名建索引，避免对每个 IPA 都重新遍历所有 App 目录。
+    _paths_by_name = {}
+    for _f in _all_ipas:
+        _paths_by_name.setdefault(_f.name, []).append(_f)
+
+    def _resolve(filename):
+        matches = _paths_by_name.get(filename) or []
+        return matches[0] if len(matches) == 1 else None
+
     # URLs remain basename based; organize after both indexes publish successfully.
     for meta in active + older:
-        source = resolve_ipa(IPA_DIR, meta["ipa_filename"])
-        if source is not None:
+        source = _resolve(meta["ipa_filename"])
+        if source is None:
+            continue
+        try:
             store_ipa(source, IPA_DIR, meta)
+        except OSError as exc:
+            # One conflicting/read-only file must not abort the whole scan.
+            print(f"  ⚠️ 整理失败，保留原文件: {meta['ipa_filename']} ({exc})")
 
     # 两份订阅源都已发布并确认可解析，才移动旧 IPA。任一写入失败时
     # 保持所有 IPA 原位，避免旧订阅中的下载链接突然失效。
+    archive_failed = 0
     for meta in older:
         filename = meta["ipa_filename"]
         try:
             destination = archive_ipa(IPA_DIR, filename)
         except OSError as exc:
+            archive_failed += 1
             print(f"  ⚠️ 归档失败，继续保留原文件: {filename} ({exc})")
-            apps.append(meta)
         else:
             new_cache.pop(filename, None)
             print(f"  📦 归档旧版本: {filename} → {destination}")
@@ -710,6 +695,8 @@ def _scan_unlocked():
     except Exception as _e:
         print(f"⚠️ 同步描述库失败: {_e}")
 
+    if archive_failed:
+        print(f"⚠️ {archive_failed} 个旧版本归档失败，已保留原位")
     print(f"\n✅ 完成！已发布 {len(final_apps)} 个版本（IPA文件{len(apps)}个）")
     return len(apps)
 
