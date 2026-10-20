@@ -57,9 +57,13 @@ services:
       - REPO_NAME=${REPO_NAME:-Private IPA Repo}
       - REPO_IDENTIFIER=${REPO_IDENTIFIER:-com.private.ipa.repo}
       - TG_PROXY=${TG_PROXY:-}
+      - TG_PROXY_OVERRIDE=${TG_PROXY_OVERRIDE:-}
       - "TG_SCAN_CRON=${TG_SCAN_CRON:-0 1 * * *}"
       - TG_SCAN_HOURS=${TG_SCAN_HOURS:-25}
       - TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}
+      - TG_DOWNLOAD_STALL_TIMEOUT=${TG_DOWNLOAD_STALL_TIMEOUT:-180}
+      - TG_DOWNLOAD_ATTEMPTS=${TG_DOWNLOAD_ATTEMPTS:-2}
+      - TG_DOWNLOAD_REQUEST_SIZE=${TG_DOWNLOAD_REQUEST_SIZE:-1048576}
       - TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}
       - TZ=${TZ:-Asia/Shanghai}
 ```
@@ -72,9 +76,13 @@ services:
 | `REPO_NAME` | 源名称（Esign 显示）| `Private IPA Repo` |
 | `REPO_IDENTIFIER` | 源 BundleId | `com.private.ipa.repo` |
 | `TG_PROXY` | TG 代理（socks5://host:port） | 空（直连） |
+| `TG_PROXY_OVERRIDE` | 仅扫描器使用的代理覆盖 | 空 |
 | `TG_SCAN_CRON` | TG 扫描 cron 表达式 | `0 1 * * *` |
 | `TG_SCAN_HOURS` | 回溯小时数 | `25` |
 | `TG_DOWNLOAD_TIMEOUT` | 单个 IPA 下载超时秒数 | `3600` |
+| `TG_DOWNLOAD_STALL_TIMEOUT` | 无进度重试阈值（秒） | `180` |
+| `TG_DOWNLOAD_ATTEMPTS` | 单文件最多尝试次数 | `2` |
+| `TG_DOWNLOAD_REQUEST_SIZE` | 单次 getFile 请求字节数 | `1048576` |
 | `TG_MAX_CONCURRENT` | 同时下载数 | `1` |
 | `TZ` | 容器时区 | `Asia/Shanghai` |
 | `HOST_PORT_NGINX` | 订阅源宿主端口 | `8080` |

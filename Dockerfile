@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir --break-system-packages \
 COPY rootfs/ /
 
 # 给脚本执行权限 + 创建必要目录
-RUN chmod +x /app/*.sh /app/*.py 2>/dev/null || true \
+RUN chmod +x /app/*.sh /app/*.py /etc/cron.daily/ipaes-logs 2>/dev/null || true \
     && mkdir -p /config /data /session /logs /data/ipa /data/icons \
     && chmod 755 /app \
     && rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
@@ -40,9 +40,11 @@ RUN chmod +x /app/*.sh /app/*.py 2>/dev/null || true \
 # 暴露端口（80=订阅源 nginx, 8085=管理 webui）
 EXPOSE 80 8085
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS http://127.0.0.1/healthz || exit 1
+# 健康检查：nginx + 已发布的 repo.json + WebUI 登录页
+HEALTHCHECK --interval=30s --timeout=8s --start-period=120s --retries=3 \
+    CMD curl -fsS http://127.0.0.1/healthz >/dev/null \
+        && test -s /data/repo.json \
+        && curl -fsS http://127.0.0.1:8085/login >/dev/null || exit 1
 
 # supervisord 接管所有进程（用我们的配置）
 ENTRYPOINT ["/app/entrypoint.sh"]

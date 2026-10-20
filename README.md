@@ -35,9 +35,13 @@ cp .env.example .env
 | `REPO_NAME` | 否 | Esign 里显示的源名称（默认 `Private IPA Repo`） |
 | `REPO_IDENTIFIER` | 否 | 源的 BundleId（默认 `com.private.ipa.repo`） |
 | `TG_PROXY` | 否 | TG 代理，留空直连（格式 `socks5://host:port` 或 `http://host:port`） |
+| `TG_PROXY_OVERRIDE` | 否 | 仅扫描器本次使用的代理覆盖；留空沿用 WebUI 代理 |
 | `TG_SCAN_CRON` | 否 | TG 扫描 cron 表达式（默认 `0 1 * * *`，每天 01:00） |
 | `TG_SCAN_HOURS` | 否 | 回溯小时数（默认 25） |
 | `TG_DOWNLOAD_TIMEOUT` | 否 | 单个 IPA 下载超时秒数（默认 3600） |
+| `TG_DOWNLOAD_STALL_TIMEOUT` | 否 | 连续无下载进度多久后重试（默认 180 秒） |
+| `TG_DOWNLOAD_ATTEMPTS` | 否 | 单文件最多尝试次数（默认 2） |
+| `TG_DOWNLOAD_REQUEST_SIZE` | 否 | 单次 getFile 请求字节数（默认 1048576，慢代理可降到 524288） |
 | `TG_MAX_CONCURRENT` | 否 | 同时下载数（默认 1） |
 | `TZ` | 否 | 时区（默认 `Asia/Shanghai`） |
 

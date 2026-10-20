@@ -12,3 +12,11 @@ logs/
 .DS_Store
 __pycache__/
 *.pyc
+.release/
+.learnings/
+.agents/
+tests/
+*.patch
+xcrun_db
+.ipa-storage.*
+.env

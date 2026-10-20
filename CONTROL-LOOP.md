@@ -15,9 +15,9 @@
 - 项目名：`ipaes`
 - 一句话定义：自托管 iOS IPA 私有源；Esign / AltStore 兼容；TG 自动下载 + WebUI 管理；单镜像单容器部署。
 - 物理边界：
-  - 仓库：`~/Documents/Codex/ipaes/`
+  - 仓库：当前 Git 工作区（历史路径 `~/Documents/Codex/ipaes/` 已迁移）
   - 镜像：`hoya0803/ipaes:latest`（Docker Hub）
-  - 运行容器：`homelab-nas` Docker 内的 `ipaes`
+  - 运行容器：NAS Docker 内的 `ipaes`（compose 项目 `ipaes`，配置在 `/opt/stacks/ipaes/compose.yaml`）
   - 数据卷：`./config /session /logs /data` 与可定制的 `IPA_DIR / ICONS_DIR`
   - 入口：宿主 `${HOST_PORT_NGINX:-8080}`（订阅源）/ `${HOST_PORT_WEBUI:-8085}`（WebUI）
 - 时间边界：长期项目，按发布节奏滚动。

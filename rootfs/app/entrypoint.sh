@@ -26,12 +26,21 @@ export REPO_NAME="${REPO_NAME:-Private IPA Repo}"
 export REPO_IDENTIFIER="${REPO_IDENTIFIER:-com.private.ipa.repo}"
 
 # === 2.5 统一时区（确保 cron 和日志时间一致）===
-ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-echo "Asia/Shanghai" > /etc/timezone
+TZ_NAME="${TZ:-Asia/Shanghai}"
+if [ -f "/usr/share/zoneinfo/$TZ_NAME" ]; then
+    ln -sf "/usr/share/zoneinfo/$TZ_NAME" /etc/localtime
+    echo "$TZ_NAME" > /etc/timezone
+else
+    echo "⚠️  未知时区 $TZ_NAME，回退 Asia/Shanghai"
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    echo "Asia/Shanghai" > /etc/timezone
+fi
 
 echo "📦 Repo URL: $REPO_BASE_URL"
 echo "⏰ TG 扫描 Cron: $TG_SCAN_CRON (每次回溯 ${TG_SCAN_HOURS}h)"
-[ -n "$TG_PROXY" ] && echo "🌐 TG 代理: $TG_PROXY"
+if [ -n "$TG_PROXY" ]; then
+    echo "🌐 TG 代理: $(printf '%s' "$TG_PROXY" | sed -E 's#(://)[^/@]+@#\1***@#')"
+fi
 
 # === 4. 准备日志目录 ===
 mkdir -p /logs /var/log/nginx

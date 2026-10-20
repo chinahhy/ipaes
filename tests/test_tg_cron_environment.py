@@ -28,9 +28,14 @@ class TgCronEnvironmentTests(unittest.TestCase):
             'CRON_TG_DOWNLOAD_ATTEMPTS=$(cron_quote "${TG_DOWNLOAD_ATTEMPTS:-2}")',
             source,
         )
+        self.assertIn(
+            'CRON_TG_DOWNLOAD_REQUEST_SIZE=$(cron_quote "${TG_DOWNLOAD_REQUEST_SIZE:-1048576}")',
+            source,
+        )
         self.assertIn('TG_DOWNLOAD_TIMEOUT="$CRON_TG_DOWNLOAD_TIMEOUT"', source)
         self.assertIn('TG_DOWNLOAD_STALL_TIMEOUT="$CRON_TG_DOWNLOAD_STALL_TIMEOUT"', source)
         self.assertIn('TG_DOWNLOAD_ATTEMPTS="$CRON_TG_DOWNLOAD_ATTEMPTS"', source)
+        self.assertIn('TG_DOWNLOAD_REQUEST_SIZE="$CRON_TG_DOWNLOAD_REQUEST_SIZE"', source)
         self.assertIn('TG_MAX_CONCURRENT="$CRON_TG_MAX_CONCURRENT"', source)
         self.assertIn(
             'CRON_TG_PROXY_OVERRIDE=$(cron_quote "${TG_PROXY_OVERRIDE:-}")', source,
@@ -56,6 +61,7 @@ class TgCronEnvironmentTests(unittest.TestCase):
             'TG_DOWNLOAD_TIMEOUT=${TG_DOWNLOAD_TIMEOUT:-3600}',
             'TG_DOWNLOAD_STALL_TIMEOUT=${TG_DOWNLOAD_STALL_TIMEOUT:-180}',
             'TG_DOWNLOAD_ATTEMPTS=${TG_DOWNLOAD_ATTEMPTS:-2}',
+            'TG_DOWNLOAD_REQUEST_SIZE=${TG_DOWNLOAD_REQUEST_SIZE:-1048576}',
             'TG_MAX_CONCURRENT=${TG_MAX_CONCURRENT:-1}',
             'TZ=${TZ:-Asia/Shanghai}',
         }
@@ -70,6 +76,7 @@ class TgCronEnvironmentTests(unittest.TestCase):
             'TG_DOWNLOAD_TIMEOUT=3600',
             'TG_DOWNLOAD_STALL_TIMEOUT=180',
             'TG_DOWNLOAD_ATTEMPTS=2',
+            'TG_DOWNLOAD_REQUEST_SIZE=1048576',
             'TG_MAX_CONCURRENT=1',
             'TG_PROXY_OVERRIDE=',
         }

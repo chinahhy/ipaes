@@ -5,12 +5,13 @@
 This project inherits the `Engineering Cybernetics Rules` section of
 `~/.codex/AGENTS.md`: the top-level five questions, seven principles, the
 6-step runtime checklist, anti-patterns, and the closed-loop final-report
-contract.
+contract. If that global file is missing or empty on the current machine, use
+this file plus `CONTROL-LOOP.md` as the fallback contract.
 
-- Meta-project source of truth: `~/Documents/Codex/控制中心`
+- Meta-project source of truth: `~/Documents/Codex/控制中心` (if present)
 - Runtime Skill: `engineering-cybernetics` (auto-triggers by description)
 - Project control-loop spec: see `CONTROL-LOOP.md` at the repo root
-- Project lifecycle records: `~/obsidian/Codex/<project>/`
+- Project lifecycle records: `~/obsidian/Codex/<project>/` (if present)
 
 Project-specific overrides below this section take precedence over the
 global rules; write them only when the project genuinely needs to deviate.
@@ -30,5 +31,5 @@ global rules; write them only when the project genuinely needs to deviate.
 
 ## Lifecycle records
 
-- 项目目录：`~/Documents/Codex/ipaes/`
-- Obsidian 记录：`~/obsidian/Codex/ipaes/`（按需建立）
+- 项目目录：当前 Git 工作区（历史记录中的 `~/Documents/Codex/ipaes/` 已迁移，以 `pwd` 为准）
+- Obsidian 记录：`~/obsidian/Codex/ipaes/`（若存在）
