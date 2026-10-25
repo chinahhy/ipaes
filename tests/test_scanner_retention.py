@@ -17,6 +17,17 @@ from ipa_storage import iter_ipas
 
 
 class ScannerRetentionIntegrationTests(unittest.TestCase):
+    def test_github_update_precedes_later_imported_old_build_without_reordering_other_apps(self):
+        metas = [
+            {'ipa_filename': 'manual_old.ipa', 'version': '0.9.4', 'bundleIdentifier': 'test.app', 'mtime': 300},
+            {'ipa_filename': 'other.ipa', 'version': '1.0', 'bundleIdentifier': 'other.app', 'mtime': 200},
+            {'ipa_filename': 'gh_new.ipa', 'version': '0.9.5', 'bundleIdentifier': 'test.app', 'mtime': 100},
+        ]
+        ordered = scanner.source_order(metas, {'gh_new.ipa'})
+        self.assertEqual([m['ipa_filename'] for m in ordered], ['gh_new.ipa', 'other.ipa', 'manual_old.ipa'])
+        self.assertEqual(ordered[0]['mtime'], 100)
+        self.assertEqual(scanner.source_order(metas, set()), metas)
+
     def test_scan_publishes_all_five_retained_versions_and_archives_sixth(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as temp:
             data = Path(temp)

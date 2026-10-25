@@ -376,6 +376,11 @@ def api_list_ipa():
         whitelist = cfg.get("whitelist") or []
     except Exception:
         whitelist = []
+    github_downloads = load_json(IPA_DIR.parent / '.github-downloads.json', {})
+    github_files = {
+        item.get('filename') for item in github_downloads.values()
+        if isinstance(item, dict)
+    }
 
     def _in_whitelist(filename: str, app_name: str) -> bool:
         if not whitelist:
@@ -399,7 +404,7 @@ def api_list_ipa():
                 # the scanner's verdict and avoid touching every IPA on each poll.
                 scan_status = "unscanned" if zipfile.is_zipfile(f) else "invalid"
             app_name = m.get("app_name") or fallback["app_name"]
-            if not _in_whitelist(f.name, app_name):
+            if f.name not in github_files and not _in_whitelist(f.name, app_name):
                 continue
             desc_rec = ipa_desc.get(f.name)
             files.append({

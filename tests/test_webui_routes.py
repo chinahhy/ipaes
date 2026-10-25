@@ -82,6 +82,25 @@ class WebuiRouteTests(unittest.TestCase):
         self.assertNotIn("/api/password", rules)
         self.assertNotIn("/static/icons/<path:p>", rules)
 
+    def test_github_downloads_are_visible_without_tg_whitelist_match(self):
+        from unittest.mock import patch
+        import json
+        import zipfile
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            ipas = root / 'ipa'
+            ipas.mkdir()
+            for name in ('gh_example.ipa', 'manual_example.ipa'):
+                with zipfile.ZipFile(ipas / name, 'w') as z:
+                    z.writestr('Payload/Test.app/Info.plist', 'fixture')
+            (root / '.github-downloads.json').write_text(json.dumps({'repo:key': {'filename': 'gh_example.ipa'}}))
+            config = root / 'config.json'
+            config.write_text(json.dumps({'whitelist': [{'name': 'Unrelated', 'keywords': ['unrelated']}]}))
+            with patch.object(webui, 'IPA_DIR', ipas), patch.object(webui, 'CONFIG_PATH', config):
+                response = self.client.get('/api/ipa', headers=AUTH)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([item['filename'] for item in response.get_json()['files']], ['gh_example.ipa'])
+
     def test_log_tail_reads_only_the_requested_suffix(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as temp:
             path = Path(temp) / "scan.log"

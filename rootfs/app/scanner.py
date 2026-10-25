@@ -17,9 +17,9 @@ from urllib.parse import urlparse, quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
-from ipa_retention import archive_ipa, select_versions
+from ipa_retention import archive_ipa, select_versions, version_order
 from ipa_storage import iter_ipas, store_ipa
-from jsonstore import atomic_write_json
+from jsonstore import atomic_write_json, load_json
 
 # 历史遗留：以前 IPA 直链带 ?token= 做 nginx 层鉴权。现在订阅链接公开分享，
 # 下载 URL 不再附 token，nginx 也不再拦截；订阅根路径 /<REPO_PATH>/ 仍是随机
@@ -505,6 +505,21 @@ def cached_meta_usable(meta: dict) -> bool:
     except Exception:
         return False
 
+def source_order(metas, github_files):
+    ordered = sorted(metas, key=lambda x: (-x['mtime'], x.get('bundleIdentifier', '')))
+    bundles = {m.get('bundleIdentifier') for m in metas if m['ipa_filename'] in github_files}
+    # A manually imported old build may have a newer mtime than its GitHub update.
+    # Reorder only versions of explicitly subscribed GitHub apps, keeping all other slots.
+    for bundle in bundles:
+        if not bundle:
+            continue
+        positions = [i for i, m in enumerate(ordered) if m.get('bundleIdentifier') == bundle]
+        versions = sorted((ordered[i] for i in positions), key=lambda m: (version_order(m.get('version')), m['mtime']), reverse=True)
+        for i, meta in zip(positions, versions):
+            ordered[i] = meta
+    return ordered
+
+
 def build_app_entry(meta: dict) -> dict:
     ipa_url = f"{BASE_URL}/ipa/{quote(meta['ipa_filename'])}"
     # 版本号绑定到图标文件本身的 mtime + size，这样图标重新提取后 URL 一定变化，
@@ -612,7 +627,9 @@ def _scan_unlocked():
 
     # 保留策略已选出本地有效版本；每个版本发布独立条目，不能再按 Bundle ID
     # 压成最新版。沿用客户端现有的平铺 apps 协议及每个 IPA 的原始字段。
-    sorted_metas = sorted(apps, key=lambda x: (-x["mtime"], x.get("bundleIdentifier", "")))
+    github_downloads = load_json(DATA_DIR / '.github-downloads.json', {})
+    github_files = {item.get('filename') for item in github_downloads.values() if isinstance(item, dict)}
+    sorted_metas = source_order(apps, github_files)
     final_apps = [build_app_entry(m) for m in sorted_metas]
     print(f"📊 发布: 本地保留{len(apps)}个IPA → 订阅{len(final_apps)}个版本（按mtime倒序）")
 
