@@ -1,4 +1,5 @@
 import hashlib
+from datetime import datetime
 import io
 import json
 from pathlib import Path
@@ -69,6 +70,18 @@ class GithubTests(unittest.TestCase):
             other = gh.ingest('owner/repo', asset(data, 2), root, opener)
             self.assertTrue(other.exists())
             self.assertNotEqual(other.name, archived.name)
+
+    def test_intake_preserves_release_order_for_existing_source(self):
+        data = ipa()
+        releases = [
+            {'published_at': '2026-10-25T00:00:00Z', 'assets': [asset(data, 2)]},
+            {'published_at': '2026-10-20T00:00:00Z', 'assets': [asset(data, 1)]},
+        ]
+        found = list(gh.release_assets('owner/repo', Opener(json.dumps(releases).encode())))
+        with tempfile.TemporaryDirectory() as temp:
+            paths = [gh.ingest('owner/repo', item, Path(temp)/'ipa', Opener(data)) for item in found]
+            self.assertGreater(paths[0].stat().st_mtime, paths[1].stat().st_mtime)
+            self.assertEqual(paths[0].stat().st_mtime, datetime.fromisoformat('2026-10-25T00:00:00+00:00').timestamp())
 
     def test_invalid_size_digest_and_zip_leave_no_ipa(self):
         data = ipa()

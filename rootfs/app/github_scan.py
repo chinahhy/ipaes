@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Public GitHub Releases intake; no Telegram session or extra service required."""
 import fcntl
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -51,7 +52,7 @@ def release_assets(repo, opener):
             assets = [a for a in release.get('assets', []) if str(a.get('name', '')).lower().endswith('.ipa')]
             if assets:
                 for asset in assets:
-                    yield asset
+                    yield {**asset, '_release_date': release.get('published_at') or release.get('created_at')}
                 count += 1
                 if count >= 5:
                     return
@@ -107,6 +108,11 @@ def ingest(repo, asset, root, opener, deadline=1800):
             staged = Path(staging) / filename
             Path(temporary).rename(staged)
             staged.chmod(0o644)  # mkstemp is 0600; nginx must read the published IPA.
+            # The existing source sorts versions by file mtime, not download order.
+            date = asset.get('_release_date') or asset.get('updated_at')
+            if date:
+                timestamp = datetime.fromisoformat(date.replace('Z', '+00:00')).timestamp()
+                os.utime(staged, (timestamp, timestamp))
             return store_ipa(staged, root, meta)
     finally:
         Path(temporary).unlink(missing_ok=True)
