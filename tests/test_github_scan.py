@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'rootfs/app'))
@@ -36,10 +37,45 @@ def ipa():
 def asset(data, number=1):
     return {'id': number, 'name': 'Test.ipa', 'size': len(data),
             'digest': 'sha256:' + hashlib.sha256(data).hexdigest(),
-            'browser_download_url': 'https://github.com/owner/repo/releases/download/v1/Test.ipa'}
+            'browser_download_url': f'https://github.com/owner/repo/releases/download/v{number}/Test.ipa'}
 
 
 class GithubTests(unittest.TestCase):
+    def test_rate_limit_uses_public_web_and_respects_cooldown(self):
+        error = HTTPError('https://api.github.com/x', 403, 'rate limit', {'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '9999999999'}, None)
+        limits = {}
+        with patch.object(gh, 'api_release_assets', side_effect=error) as api, patch.object(gh, 'web_release_assets', return_value=iter([asset(b'x')])):
+            self.assertEqual(len(list(gh.release_assets('owner/repo', None, limits))), 1)
+            api.assert_called_once()
+        self.assertEqual(limits['until'], 9999999999)
+        with patch.object(gh, 'api_release_assets') as api, patch.object(gh, 'web_release_assets', return_value=iter([])):
+            list(gh.release_assets('owner/repo', None, limits))
+            api.assert_not_called()
+
+    def test_non_rate_limit_forbidden_does_not_fallback(self):
+        error = HTTPError('https://api.github.com/x', 403, 'forbidden', {}, None)
+        with patch.object(gh, 'api_release_assets', side_effect=error), patch.object(gh, 'web_release_assets') as web:
+            with self.assertRaises(HTTPError):
+                list(gh.release_assets('owner/repo', None))
+            web.assert_not_called()
+
+    def test_public_asset_parser_and_cross_channel_identity(self):
+        data = ipa()
+        item = asset(data)
+        page = gh.ReleaseHTML()
+        page.feed('<span class="Label Label--warning">Pre-release</span><relative-time datetime="2026-10-25T00:00:00Z"></relative-time>')
+        self.assertTrue(page.prerelease)
+        self.assertEqual(page.published, '2026-10-25T00:00:00Z')
+        parser = gh.ReleaseHTML()
+        path = '/owner/repo/releases/download/v1/Test.ipa'
+        parser.feed(f'<li><a href="{path}">Test.ipa</a><clipboard-copy value="{item["digest"]}"></clipboard-copy></li><li><a href="/owner/repo/releases/download/v1/Test.apk">Android</a></li>')
+        self.assertEqual(len(parser.assets), 1)
+        parsed = parser.assets[0]
+        self.assertEqual(gh.asset_key(parsed), gh.asset_key(item))
+        with tempfile.TemporaryDirectory() as temp:
+            stored = gh.ingest('owner/repo', parsed, Path(temp)/'ipa', Opener(data))
+            self.assertTrue(stored.exists())
+
     def test_normalization_and_host_restriction(self):
         self.assertEqual(gh.normalize_repo('https://github.com/Owner/Repo/releases/latest'), 'owner/repo')
         for value in ['https://evil.test/a/b', 'owner/..', '../repo', 'https://github.com/a/b?x=1', None]:

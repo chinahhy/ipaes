@@ -3,15 +3,17 @@
 import fcntl
 from datetime import datetime
 import hashlib
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
 import re
 import tempfile
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote, quote
 import urllib.request
 from urllib.error import HTTPError
+import xml.etree.ElementTree as ET
 import zipfile
 
 from ipa_storage import identity, store_ipa, iter_ipas
@@ -36,7 +38,91 @@ def normalize_repo(value):
     return value.lower()
 
 
-def release_assets(repo, opener):
+class ReleaseHTML(HTMLParser):
+    """Read only GitHub's release badges, dates and asset rows."""
+    def __init__(self):
+        super().__init__()
+        self.assets, self.item, self.spans = [], None, []
+        self.prerelease, self.published = False, None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'span':
+            self.spans.append('Label' in attrs.get('class', ''))
+        if tag == 'li':
+            self.item = {}
+        if tag == 'relative-time':
+            self.published = self.published or attrs.get('datetime')
+            if self.item is not None:
+                self.item['updated_at'] = attrs.get('datetime')
+        if self.item is not None:
+            if tag == 'a' and attrs.get('href', '').lower().endswith('.ipa'):
+                self.item['browser_download_url'] = 'https://github.com' + attrs['href']
+                self.item['name'] = unquote(attrs['href'].rsplit('/', 1)[-1])
+            if tag == 'clipboard-copy' and re.fullmatch(r'sha256:[0-9a-f]{64}', attrs.get('value', '')):
+                self.item['digest'] = attrs['value']
+
+    def handle_endtag(self, tag):
+        if tag == 'span' and self.spans:
+            self.spans.pop()
+        if tag == 'li' and self.item is not None:
+            if 'browser_download_url' in self.item:
+                self.assets.append(self.item)
+            self.item = None
+
+    def handle_data(self, data):
+        if any(self.spans) and data.strip() == 'Pre-release':
+            self.prerelease = True
+
+
+def web_release_assets(repo, opener):
+    def read(url):
+        with opener.open(urllib.request.Request(url, headers={'User-Agent': 'ipaes'}), timeout=60) as response:
+            return response.read()
+    feed = ET.fromstring(read(f'https://github.com/{repo}/releases.atom'))
+    namespace = {'a': 'http://www.w3.org/2005/Atom'}
+    count = 0
+    for entry in feed.findall('a:entry', namespace):
+        link = entry.find('a:link', namespace)
+        url = link.get('href', '') if link is not None else ''
+        prefix = f'https://github.com/{repo}/releases/tag/'
+        if not url.lower().startswith(prefix):
+            continue
+        tag = quote(unquote(url[len(prefix):]), safe='')
+        page = ReleaseHTML()
+        page.feed(read(url).decode('utf-8'))
+        if page.prerelease:
+            continue
+        assets = ReleaseHTML()
+        assets.feed(read(f'https://github.com/{repo}/releases/expanded_assets/{tag}').decode('utf-8'))
+        if assets.assets:
+            for asset in assets.assets:
+                yield {**asset, '_release_date': page.published}
+            count += 1
+            if count >= 5:
+                return
+
+
+def release_assets(repo, opener, limits=None):
+    limits = limits if limits is not None else {}
+    if limits.get('until', 0) > time.time():
+        yield from web_release_assets(repo, opener)
+        return
+    try:
+        yield from api_release_assets(repo, opener)
+    except HTTPError as exc:
+        if exc.code not in (403, 429) or (exc.code == 403 and exc.headers.get('X-RateLimit-Remaining') != '0'):
+            raise
+        # Normal public release pages remain usable when the REST API is rate limited.
+        try:
+            limits['until'] = max(float(exc.headers.get('X-RateLimit-Reset', 0)), time.time() + float(exc.headers.get('Retry-After', 60)))
+        except ValueError:
+            limits['until'] = time.time() + 60
+        print(f'GitHub API 限流：{repo}，使用公开 Releases 网页', flush=True)
+        yield from web_release_assets(repo, opener)
+
+
+def api_release_assets(repo, opener):
     # Bounded history: five releases containing IPA, at most 100 releases.
     count = 0
     for page in range(1, 6):
@@ -68,8 +154,8 @@ def ingest(repo, asset, root, opener, deadline=1800):
     name = asset['name']
     if '/' in name or '\\' in name or '..' in name or any(ord(c) < 32 for c in name):
         raise ValueError('非法 IPA 文件名')
-    # Stable asset ID prevents collisions with TG and different releases.
-    filename = f"gh_{repo.replace('/', '_')}_{int(asset['id'])}_{name[:-4]}.ipa"
+    # Both API and public HTML must identify an asset identically across scans.
+    filename = f"gh_{repo.replace('/', '_')}_{asset_key(asset)}_{name[:-4]}.ipa"
     for path in iter_ipas(root) + iter_ipas(root, archived=True):
         if path.name == filename:
             return path
@@ -81,6 +167,12 @@ def ingest(repo, asset, root, opener, deadline=1800):
         total = 0
         with os.fdopen(fd, 'wb') as target:
             with opener.open(urllib.request.Request(url, headers={'User-Agent': 'ipaes'}), timeout=60) as response:
+                size = asset.get('size')
+                if size is None:
+                    size = getattr(response, 'headers', {}).get('Content-Length')
+                size = int(size) if size is not None else None
+                if size is None and not asset.get('digest'):
+                    raise ValueError('附件缺少大小与校验信息')
                 while True:
                     if time.monotonic() - start > deadline:
                         raise TimeoutError('GitHub 下载超过 30 分钟')
@@ -88,11 +180,11 @@ def ingest(repo, asset, root, opener, deadline=1800):
                     if not block:
                         break
                     total += len(block)
-                    if total > int(asset['size']):
+                    if size is not None and total > size:
                         raise ValueError('附件大小超出预期')
                     digest.update(block)
                     target.write(block)
-        if total != int(asset['size']):
+        if size is not None and total != size:
             raise ValueError('附件下载不完整')
         expected = asset.get('digest')
         if expected and expected != 'sha256:' + digest.hexdigest():
@@ -118,6 +210,11 @@ def ingest(repo, asset, root, opener, deadline=1800):
         Path(temporary).unlink(missing_ok=True)
 
 
+def asset_key(asset):
+    value = asset['browser_download_url'] + ':' + (asset.get('digest') or asset.get('updated_at') or '')
+    return hashlib.sha256(value.encode()).hexdigest()[:16]
+
+
 def scan(config=Path('/config/config.json'), root=Path('/data/ipa'), state_path=Path('/data/.github-downloads.json')):
     cfg = load_json(config, {}, recover=True)
     repos = cfg.get('github_repos', [])
@@ -134,15 +231,17 @@ def scan(config=Path('/config/config.json'), root=Path('/data/ipa'), state_path=
         proxies = {'http': proxy['url'], 'https': proxy['url']} if proxy.get('enabled', True) and proxy.get('url') else {}
         opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
         state = load_json(state_path, {})
+        limit_path = state_path.with_suffix('.api-limit.json')
+        limits = load_json(limit_path, {})
         errors = 0
         print(time.strftime('==== GitHub scan %Y-%m-%d %H:%M:%S ===='), flush=True)
         for value in repos:
             try:
                 repo = normalize_repo(value)
                 found = 0
-                for asset in release_assets(repo, opener):
+                for asset in release_assets(repo, opener, limits):
                     found += 1
-                    key = f"{repo}:{asset['id']}"
+                    key = f"{repo}:{asset_key(asset)}"
                     if key in state:
                         continue
                     try:
@@ -157,6 +256,8 @@ def scan(config=Path('/config/config.json'), root=Path('/data/ipa'), state_path=
             except Exception as exc:
                 errors += 1
                 print(f'GitHub 仓库失败：{value} ({error_label(exc)})', flush=True)
+            if limits:
+                atomic_write_json(limit_path, limits)
         return 1 if errors else 0
 
 
