@@ -4,6 +4,8 @@
   "api_hash": "your_api_hash_here",
   "phone": "+8613800138000",
   "_groups_help": "要扫描的TG群链接列表（按优先级排序）",
+  "_github_help": "公开 GitHub 仓库，独立于 TG 白名单；只下载正式 Releases 的 IPA",
+  "github_repos": [],
   "groups": [
     "https://t.me/example_group_1",
     "https://t.me/example_group_2"

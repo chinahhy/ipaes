@@ -4,11 +4,11 @@
     <div class="workspace-head">
       <div class="workspace-title">
         <h1>规则</h1>
-        <p>Telegram 来源与 APP 入库筛选</p>
+        <p>Telegram / GitHub 来源与 APP 入库筛选</p>
       </div>
       <div class="workspace-kpis">
         <div class="kpi-chip accent">
-          <strong x-text="(cfg.groups || []).length"></strong>
+          <strong x-text="(cfg.groups || []).length + (cfg.github_repos || []).length"></strong>
           <span>来源</span>
         </div>
         <div class="kpi-chip">
@@ -18,6 +18,25 @@
         <div class="kpi-chip">
           <strong x-text="(cfg.whitelist || []).length"></strong>
           <span>APP</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="head-block"><h2>GitHub Releases</h2><span>只下载正式版本的 IPA · 独立于 TG 白名单 · 与 TG 共用定时计划</span></div>
+      </div>
+      <div class="panel-body">
+        <div class="head-actions" style="flex-wrap:wrap">
+          <input class="head-input" style="flex:1;min-width:200px" x-model="newGithub" placeholder="owner/repo 或 GitHub 仓库地址" aria-label="GitHub 仓库" @keydown.enter="addGithub()">
+          <button type="button" class="btn primary sm" style="white-space:nowrap" @click="addGithub()">添加仓库</button>
+          <button type="button" class="btn sm" style="white-space:nowrap" @click="scanGithub()">扫描 GitHub</button>
+        </div>
+        <p class="muted" x-show="!(cfg.github_repos || []).length">尚未添加 GitHub 仓库。首次最多获取最近 5 个含 IPA 的正式版本。</p>
+        <div class="group-chips">
+          <template x-for="repo in (cfg.github_repos || [])" :key="repo">
+            <div class="group-chip"><a :href="'https://github.com/' + repo" target="_blank" rel="noopener" x-text="repo"></a><button type="button" class="btn sm" @click="delGithub(repo)" :aria-label="'移除仓库 ' + repo">移除</button></div>
+          </template>
         </div>
       </div>
     </div>

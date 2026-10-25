@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from flask import Flask, request, jsonify, send_from_directory, Response, abort, make_response, redirect, render_template
 from urllib.parse import quote
 from ipa_storage import iter_ipas, resolve_ipa
+from github_scan import normalize_repo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ipa_descriptions as ipa_desc
@@ -185,12 +186,38 @@ def api_logout():
 def api_get_config():
     cfg = load_config()
     safe = {
+        "github_repos": cfg.get("github_repos", []),
         "groups": cfg.get("groups", []),
         "priority_groups": cfg.get("priority_groups", []),
         "whitelist": cfg.get("whitelist", []),
         "rate_limit": cfg.get("rate_limit", {}),
     }
     return jsonify(safe)
+
+@app.route("/api/github/repos", methods=["POST", "DELETE"])
+@require_auth
+def api_github_repos():
+    try:
+        repo = normalize_repo((request.get_json(force=True) or {}).get("url"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    cfg = load_config()
+    repos = cfg.setdefault("github_repos", [])
+    if request.method == "POST":
+        if repo in repos:
+            return jsonify({"error": "仓库已存在"}), 409
+        repos.append(repo)
+    else:
+        cfg["github_repos"] = [r for r in repos if r != repo]
+    save_config(cfg)
+    return jsonify({"ok": True})
+
+@app.route("/api/github/scan", methods=["POST"])
+@require_auth
+def api_github_scan():
+    with (LOG_DIR / "github.log").open("a") as log:
+        subprocess.Popen([sys.executable, str(Path(__file__).with_name("github_scan.py"))], stdout=log, stderr=log)
+    return jsonify({"ok": True})
 
 @app.route("/api/groups", methods=["POST"])
 @require_auth
@@ -533,6 +560,7 @@ def _tail_lines(path: Path, count: int) -> list[str]:
 @require_auth
 def api_get_log(name):
     allow = {
+        "github": "github.log",
         "tg-cron": "tg-cron.log",
         "tg-runtime": "tg-runtime.log",
         "scanner": "scanner.log",

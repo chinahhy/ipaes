@@ -27,6 +27,13 @@ shrink_log_if_needed "$RUNTIME_LOG"
 echo "" >> "$LOG"
 echo "==== TG scan triggered at $(date '+%Y-%m-%d %H:%M:%S') ====" >> "$LOG"
 
+# GitHub 独立于 TG session；失败不阻塞 TG。
+if timeout --signal=TERM --kill-after=15s 10800s /usr/bin/python3 /app/github_scan.py >> /logs/github.log 2>&1; then
+    :
+else
+    echo "GitHub 扫描失败，详见 github.log" >> "$LOG"
+fi
+
 # Session 检查
 if [ ! -f /session/tg-ipa-bot.session ]; then
     echo "❌ Session 未登录，跳过本次扫描" >> "$LOG"

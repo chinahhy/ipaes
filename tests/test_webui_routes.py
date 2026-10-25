@@ -57,6 +57,25 @@ class WebuiRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["token"], "")
 
+    def test_github_repo_management_preserves_other_config(self):
+        from unittest.mock import patch
+        import json
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "config.json"
+            config.write_text(json.dumps({"groups": ["https://t.me/example"], "whitelist": [], "secret": "keep"}))
+            with patch.object(webui, "CONFIG_PATH", config):
+                self.assertEqual(self.client.post("/api/github/repos", json={"url": "a/b"}).status_code, 401)
+                self.assertEqual(self.client.post("/api/github/repos", headers=AUTH, json={"url": "https://evil.test/a/b"}).status_code, 400)
+                response = self.client.post("/api/github/repos", headers=AUTH, json={"url": "https://github.com/Owner/Repo"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(self.client.post("/api/github/repos", headers=AUTH, json={"url": "owner/repo"}).status_code, 409)
+                self.assertEqual(self.client.get("/api/config", headers=AUTH).get_json()["github_repos"], ["owner/repo"])
+                self.assertEqual(self.client.delete("/api/github/repos", headers=AUTH, json={"url": "owner/repo"}).status_code, 200)
+                saved = json.loads(config.read_text())
+                self.assertEqual(saved["groups"], ["https://t.me/example"])
+                self.assertEqual(saved["secret"], "keep")
+                self.assertEqual(saved["github_repos"], [])
+
     def test_removed_dead_routes_are_gone(self):
         rules = {rule.rule for rule in webui.app.url_map.iter_rules()}
         self.assertNotIn("/api/restart", rules)

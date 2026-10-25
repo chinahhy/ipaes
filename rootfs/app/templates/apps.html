@@ -8,7 +8,7 @@
           <span x-text="appSearch ? '筛选中' : appsSummary()"></span>
         </div>
         <div class="head-actions">
-          <button type="button" class="btn sm" @click="triggerScan()" :disabled="scanning" title="触发一次 TG 扫描，从配置好的群组拉取最新 IPA">
+          <button type="button" class="btn sm" @click="triggerScan()" :disabled="scanning" title="触发 GitHub 与 TG 扫描，拉取最新 IPA">
             <span x-text="scanning ? '🔍 扫描中…' : '🔍 扫描'"></span>
           </button>
           <button type="button" class="btn sm primary pulse-btn" @click="reindexNow()" :disabled="reindexing" :class="{loading:reindexing}" title="重新扫描磁盘并重建 IPA 元信息缓存">

@@ -151,3 +151,22 @@ tail -f logs/tg-cron.log
 ## 📜 License
 
 MIT
+
+### GitHub Releases 下载通道
+
+在 WebUI「规则 → GitHub Releases」添加公开仓库，例如
+`https://github.com/huamurui/zhihu-minus-minus`，再点击「扫描 GitHub」。
+支持 `owner/repo`、仓库 URL 和 Releases 页面地址。显式添加的仓库独立于 TG
+白名单，仅下载正式 Release 的 `.ipa` 附件，不下载 APK、源码包、草稿或预发布。
+首次最多获取最近 5 个含 IPA 的正式版本（最多检查 100 个 Release）。
+
+GitHub 与 TG 共用原有定时计划，也可独立手动扫描；无需 TG 登录。
+日志位于 WebUI「日志 → GitHub 下载」（`/logs/github.log`）。下载使用共享代理设置
+中的 HTTP/HTTPS 代理；关闭代理时直连。公开仓库不需要 GitHub Token，API 限流或
+网络失败会记录错误并在下次扫描重试。
+
+附件先下载到隐藏临时文件，核对大小、GitHub 提供的 SHA-256（如有）、IPA 元数据和
+ZIP 完整性后，才通过现有 App 目录入库。附件 ID 去重记录保存在
+`/data/.github-downloads.json`，已入库或被版本保留规则归档的附件不会反复下载。
+仓库与附件 ID 加入文件名，避免覆盖 TG 或其他 Release 的同名包。
+移除仓库仅停止后续扫描，保留已经下载的 IPA。现有版本保留和 X 10.76 保护规则继续生效。

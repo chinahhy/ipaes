@@ -2087,7 +2087,8 @@ function ipaApp() {
       { id: 'logs', name: '日志', icon: '📝' },
     ],
     workspace: 'apps',
-    cfg: { groups: [], priority_groups: [], whitelist: [], rate_limit: {} },
+    newGithub: '',
+    cfg: { github_repos: [], groups: [], priority_groups: [], whitelist: [], rate_limit: {} },
     status: {},
     account: { username: '', newPassword: '', confirmPassword: '', showNewPassword: false, showConfirmPassword: false },
     accountSaving: false,
@@ -2491,6 +2492,7 @@ function ipaApp() {
     async loadConfig() {
       const c = await this.api('GET', '/api/config');
       this.cfg = {
+        github_repos: c.github_repos || [],
         groups: c.groups || [],
         priority_groups: c.priority_groups || [],
         whitelist: c.whitelist || [],
@@ -2664,6 +2666,22 @@ function ipaApp() {
       } catch (e) {
         this.logContent = '读取日志失败：' + (e && e.message ? e.message : e);
       }
+    },
+
+    async addGithub() {
+      if (!this.newGithub.trim()) return;
+      await this.api('POST', '/api/github/repos', {url: this.newGithub.trim()});
+      this.newGithub = '';
+      await this.loadConfig();
+      this.showToast('已添加 GitHub 仓库');
+    },
+    async delGithub(repo) {
+      await this.api('DELETE', '/api/github/repos', {url: repo});
+      await this.loadConfig();
+    },
+    async scanGithub() {
+      await this.api('POST', '/api/github/scan');
+      this.showToast('GitHub 扫描已触发，可在日志页查看');
     },
 
     async addGroup() {
